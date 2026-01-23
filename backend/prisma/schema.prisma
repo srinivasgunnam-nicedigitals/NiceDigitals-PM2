@@ -1,0 +1,195 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Enums matching frontend exactly
+enum UserRole {
+  ADMIN
+  DESIGNER
+  DEV_MANAGER
+  QA_ENGINEER
+}
+
+enum ProjectStage {
+  UPCOMING
+  DESIGN
+  DEVELOPMENT
+  QA
+  SEND_TO_CLIENT
+  ADMIN_REVIEW
+  SENT_TO_CLIENT
+  COMPLETED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Tenant {
+  id        String    @id @default(uuid())
+  name      String
+  createdAt DateTime  @default(now())
+  
+  users     User[]
+  projects  Project[]
+  comments  Comment[]
+  history   HistoryItem[]
+  scores    ScoreEntry[]
+  notifications Notification[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String?  // Optional for now to support existing mock data import
+  role      UserRole
+  avatar    String?
+
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  // Relations
+  projectsDesigned Project[] @relation("AssignedDesigner")
+  projectsManaged  Project[] @relation("AssignedDevManager")
+  projectsQA       Project[] @relation("AssignedQA")
+  
+  comments         Comment[]
+  scores           ScoreEntry[] 
+  notifications    Notification[]
+  resetTokens      PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Project {
+  id              String       @id @default(uuid())
+  name            String
+  clientName      String
+  scope           String
+  priority        Priority
+  stage           ProjectStage
+  overallDeadline DateTime
+  currentDeadline DateTime?
+  
+  tenantId        String
+  tenant          Tenant       @relation(fields: [tenantId], references: [id])
+
+  // Relations
+  assignedDesignerId   String?
+  assignedDesigner     User?   @relation("AssignedDesigner", fields: [assignedDesignerId], references: [id])
+  
+  assignedDevManagerId String?
+  assignedDevManager   User?   @relation("AssignedDevManager", fields: [assignedDevManagerId], references: [id])
+  
+  assignedQAId         String?
+  assignedQA           User?   @relation("AssignedQA", fields: [assignedQAId], references: [id])
+
+  // JSON Checklists for direct mapping to frontend
+  designChecklist Json[]
+  devChecklist    Json[]
+  qaChecklist     Json[]
+  finalChecklist  Json[]
+
+  isDelayed    Boolean @default(false)
+  qaFailCount  Int     @default(0)
+
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+
+  comments     Comment[]
+  history      HistoryItem[]
+  scores       ScoreEntry[]
+
+  @@index([tenantId])
+  @@index([assignedDevManagerId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  text      String
+  timestamp DateTime @default(now())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model HistoryItem {
+  id        String       @id @default(uuid())
+  stage     ProjectStage
+  action    String
+  timestamp DateTime     @default(now())
+  userId    String       
+  rejectionSnapshot Json?
+
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model ScoreEntry {
+  id        String   @id @default(uuid())
+  date      DateTime @default(now())
+  points    Int
+  reason    String
+  
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, userId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  title     String
+  message   String
+  type      String   // 'assignment', 'alert', 'info'
+  read      Boolean  @default(false)
+  timestamp DateTime @default(now())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([userId])
+  @@index([tenantId])
+}
