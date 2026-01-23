@@ -4,6 +4,7 @@ import { AppRoutes } from './Routes';
 import { ThemeProvider } from './ThemeContext';
 import { AppProvider, useApp } from './store';
 import { ModalProvider } from './hooks/useModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import RoleSpecificDashboard from './pages/Dashboard';
 import { Login } from './pages/Login';
@@ -18,13 +19,15 @@ const AppContent = () => {
 
 const App: React.FC = () => {
   return (
-    <ThemeProvider>
-      <ModalProvider>
-        <AppProvider>
-          <AppContent />
-        </AppProvider>
-      </ModalProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <ModalProvider>
+          <AppProvider>
+            <AppContent />
+          </AppProvider>
+        </ModalProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 };
 

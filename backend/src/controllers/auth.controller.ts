@@ -31,28 +31,10 @@ export const login = async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        // 2. Validate Password with Strict Migration Logic
-        let isValid = false;
-
-        const isBcryptHash = user.password.startsWith('$2');
-
-        if (isBcryptHash) {
-            isValid = await bcrypt.compare(password, user.password);
-        } else {
-            // LEGACY MIGRATION PATH
-            // Strictly compare strings.
-            if (user.password === password) {
-                isValid = true;
-
-                // FORCE MIGRATION IMMEDIATELY
-                const hashedPassword = await bcrypt.hash(password, 10);
-                await prisma.user.update({
-                    where: { id: user.id },
-                    data: { password: hashedPassword }
-                });
-                console.log(`[AUTH] SECURITY: Migrated legacy password for user ${user.id}`);
-            }
-        }
+        // 2. Validate Password
+        // All passwords MUST be bcrypt hashed
+        // If legacy migration is needed, run it via offline script, not in login flow
+        const isValid = await bcrypt.compare(password, user.password);
 
         if (!isValid) {
             return res.status(401).json({ error: 'Invalid credentials' });
@@ -113,8 +95,9 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
             });
         }
 
-        // Generate a secure 6-digit token
-        const token = Math.floor(100000 + Math.random() * 900000).toString();
+        // Generate a cryptographically secure 6-digit token
+        const crypto = require('crypto');
+        const token = crypto.randomInt(100000, 1000000).toString();
 
         // Set expiration to 1 hour from now
         const expiresAt = new Date();

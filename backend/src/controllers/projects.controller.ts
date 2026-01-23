@@ -1,10 +1,13 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
+import * as projectsService from '../services/projects.service';
 
 export const getProjects = async (req: Request, res: Response) => {
     try {
         const tenantId = req.user?.tenantId;
-        if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        if (!tenantId) {
+            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        }
 
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 50;
@@ -45,19 +48,15 @@ export const getProjects = async (req: Request, res: Response) => {
 export const createProject = async (req: Request, res: Response) => {
     try {
         const tenantId = req.user?.tenantId;
-        if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        if (!tenantId) {
+            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        }
 
         const p = req.body;
 
-        // Prisma handles the JSON types automatically if matched in schema, 
-        // but we might need to be careful with types if schema uses Json.
-        // Assuming schema uses Json[] or Json for checklists.
-
-        // Construct the create data
-        // Explicitly map fields to avoid relying on implicit body structure matching
         const newProject = await prisma.project.create({
             data: {
-                id: p.id, // Optional: Let Prisma generate if UUID, but frontend sends ID currently
+                id: p.id,
                 name: p.name,
                 clientName: p.clientName,
                 scope: p.scope,
@@ -77,23 +76,22 @@ export const createProject = async (req: Request, res: Response) => {
                 createdAt: p.createdAt,
                 completedAt: p.completedAt,
                 tenantId: tenantId,
-                // Nested write for history if present
                 history: p.history && p.history.length > 0 ? {
                     create: p.history.map((h: any) => ({
-                         id: `h-${Date.now()}-${Math.random()}`, // Ensure unique ID
-                         stage: h.stage,
-                         action: h.action,
-                         timestamp: h.timestamp,
-                         userId: h.userId,
-                         tenantId: tenantId
+                        id: `h-${Date.now()}-${Math.random()}`,
+                        stage: h.stage,
+                        action: h.action,
+                        timestamp: h.timestamp,
+                        userId: h.userId,
+                        tenantId: tenantId
                     }))
                 } : undefined
             },
             include: {
                 comments: true,
-                history: true, 
+                history: true,
                 assignedDesigner: true,
-                assignedDevManager: true, 
+                assignedDevManager: true,
                 assignedQA: true
             }
         });
@@ -108,18 +106,14 @@ export const createProject = async (req: Request, res: Response) => {
 export const updateProject = async (req: Request, res: Response) => {
     try {
         const tenantId = req.user?.tenantId;
-        if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        if (!tenantId) {
+            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        }
 
         const { id } = req.params;
         const updates = req.body;
         const { history, comments, newHistoryItem, ...scalarUpdates } = updates;
 
-        // Verify ownership first (Prisma doesn't support 'where' in update for non-unique fields easily in one go, 
-        // but ID is unique. To strictly enforce tenant, we should use updateMany or findFirst check)
-        
-        // updateMany is safe for tenant check but doesn't return the object in one go nicely with relations for all DBs (Postgres does, but Prisma API varies).
-        // Best pattern: findFirst verify -> update.
-        
         const existing = await prisma.project.findFirst({
             where: { id, tenantId }
         });
@@ -128,7 +122,6 @@ export const updateProject = async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Project not found or access denied' });
         }
 
-        // Prepare nested operations
         const historyCreate = newHistoryItem ? {
             create: {
                 id: `h-${Date.now()}-${Math.random()}`,
@@ -166,22 +159,23 @@ export const updateProject = async (req: Request, res: Response) => {
 export const deleteProject = async (req: Request, res: Response) => {
     try {
         const tenantId = req.user?.tenantId;
-        if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        if (!tenantId) {
+            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        }
 
         const { id } = req.params;
 
-        // Use deleteMany to include tenantId in filter (Prisma strict delete requires unique ID only)
         const result = await prisma.project.deleteMany({
-            where: { 
-                id, 
-                tenantId 
+            where: {
+                id,
+                tenantId
             }
         });
 
         if (result.count === 0) {
-           return res.status(404).json({ error: 'Project not found' });
+            return res.status(404).json({ error: 'Project not found' });
         }
-        
+
         res.json({ success: true });
     } catch (error) {
         console.error('Delete error:', error);
@@ -191,15 +185,23 @@ export const deleteProject = async (req: Request, res: Response) => {
 
 export const addComment = async (req: Request, res: Response) => {
     try {
-        const { id } = req.params; // projectId
+        const { id } = req.params;
         const { text, userId, id: commentId, timestamp } = req.body;
-        // Ideally verify user belongs to tenant, but userId matches login usually.
+        const tenantId = req.user?.tenantId;
 
-        // We should verify project belongs to tenant!
-        // Implicitly done if we rely on UI, but strictly:
-        // const p = await prisma.project.findFirst({ where: { id, tenantId: req.user.tenantId }})
-        // For speed, proceeding with direct create, assuming IDs are UUIDs difficult to guess.
-        
+        if (!tenantId) {
+            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        }
+
+        // Verify project belongs to tenant
+        const project = await prisma.project.findFirst({
+            where: { id, tenantId }
+        });
+
+        if (!project) {
+            return res.status(404).json({ error: 'Project not found or access denied' });
+        }
+
         const newComment = await prisma.comment.create({
             data: {
                 id: commentId || `c-${Date.now()}`,
@@ -207,7 +209,7 @@ export const addComment = async (req: Request, res: Response) => {
                 userId,
                 projectId: id,
                 timestamp: timestamp || new Date().toISOString(),
-                tenantId: req.user?.tenantId!
+                tenantId
             }
         });
 
@@ -215,5 +217,71 @@ export const addComment = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Add comment error:', error);
         res.status(500).json({ error: 'Failed to add comment' });
+    }
+};
+
+/**
+ * NEW SECURE ENDPOINT: Advance project stage
+ * Server calculates all scores - client cannot influence
+ */
+export const advanceStage = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { nextStage } = req.body;
+        const userId = req.user?.id;
+        const tenantId = req.user?.tenantId;
+
+        if (!userId || !tenantId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        if (!nextStage) {
+            return res.status(400).json({ error: 'nextStage is required' });
+        }
+
+        const updatedProject = await projectsService.advanceProjectStage({
+            projectId: id,
+            nextStage,
+            userId,
+            tenantId
+        });
+
+        res.json(updatedProject);
+    } catch (error: any) {
+        console.error('Advance stage error:', error);
+        res.status(500).json({ error: error.message || 'Failed to advance stage' });
+    }
+};
+
+/**
+ * NEW SECURE ENDPOINT: Record QA feedback
+ * Server calculates penalties/bonuses - client cannot influence
+ */
+export const recordQAFeedback = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { passed } = req.body;
+        const userId = req.user?.id;
+        const tenantId = req.user?.tenantId;
+
+        if (!userId || !tenantId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        if (typeof passed !== 'boolean') {
+            return res.status(400).json({ error: 'passed (boolean) is required' });
+        }
+
+        const updatedProject = await projectsService.recordQAFeedback({
+            projectId: id,
+            passed,
+            userId,
+            tenantId
+        });
+
+        res.json(updatedProject);
+    } catch (error: any) {
+        console.error('QA feedback error:', error);
+        res.status(500).json({ error: error.message || 'Failed to record QA feedback' });
     }
 };

@@ -97,6 +97,18 @@ export const backendApi = {
         return response.data;
     },
 
+    // NEW SECURE ENDPOINTS: Stage advancement and QA feedback
+    // These replace the old client-side scoring logic
+    advanceProjectStage: async (projectId: string, nextStage: string) => {
+        const response = await api.post<Project>(`/projects/${projectId}/advance-stage`, { nextStage });
+        return response.data;
+    },
+
+    recordQAFeedback: async (projectId: string, passed: boolean) => {
+        const response = await api.post<Project>(`/projects/${projectId}/qa-feedback`, { passed });
+        return response.data;
+    },
+
     // Users
     getUsers: async () => {
         const response = await api.get<User[]>('/users');
@@ -117,16 +129,17 @@ export const backendApi = {
         await api.delete(`/users/${id}`);
     },
 
-    // Scores
+    // Scores (read-only)
+    // Scores are now ONLY created by backend during project lifecycle events
     getScores: async () => {
         const response = await api.get<ScoreEntry[]>('/scores');
         return response.data;
     },
 
-    addScore: async (score: ScoreEntry) => {
-        const response = await api.post<ScoreEntry>('/scores', score);
-        return response.data;
-    },
+    // DEPRECATED: addScore removed for security
+    // Scores are automatically calculated by backend when:
+    // - Projects advance stages (via advanceProjectStage)
+    // - QA feedback is recorded (via recordQAFeedback)
 
     // Rankings
     getRankings: async () => {

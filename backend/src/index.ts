@@ -2,6 +2,9 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { logger } from './config/logger';
+import { requestIdMiddleware } from './middleware/requestId.middleware';
+import { errorHandler } from './middleware/errorHandler.middleware';
 import authRoutes from './routes/auth.routes';
 import projectRoutes from './routes/projects.routes';
 import userRoutes from './routes/users.routes';
@@ -13,11 +16,16 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Security Check
-if (!process.env.JWT_SECRET) {
-    console.error('FATAL: JWT_SECRET is not defined in environment variables.');
+// CRITICAL: Validate required environment variables at startup
+const requiredEnvVars = ['JWT_SECRET', 'DATABASE_URL'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+    logger.fatal({ missingVars }, 'FATAL: Required environment variables are missing');
     process.exit(1);
 }
+
+logger.info('Environment validation passed');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
@@ -32,7 +40,7 @@ app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
-        
+
         if (allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
@@ -49,18 +57,18 @@ app.use(cors({
 import { rateLimit } from 'express-rate-limit';
 
 const authLimiter = rateLimit({
-	windowMs: 15 * 60 * 1000, // 15 minutes
-	limit: 20, // Strict limit for auth/login
-	standardHeaders: 'draft-7',
-	legacyHeaders: false,
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    limit: 20, // Strict limit for auth/login
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
     message: { error: 'Too many login attempts, please try again later.' }
 });
 
 const apiLimiter = rateLimit({
-	windowMs: 15 * 60 * 1000,
-	limit: 300, // Relaxed limit for general API usage
-	standardHeaders: 'draft-7',
-	legacyHeaders: false,
+    windowMs: 15 * 60 * 1000,
+    limit: 300, // Relaxed limit for general API usage
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
 });
 
 app.use('/api/auth', authLimiter);
@@ -73,9 +81,25 @@ app.use('/api', apiLimiter); // Applies to all other /api routes that aren't cau
 
 app.use(express.json());
 
-// Global logging middleware
+// Request ID middleware (must be early in chain)
+app.use(requestIdMiddleware);
+
+// Structured request logging
 app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url} request received`);
+    const start = Date.now();
+
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        logger.info({
+            requestId: (req as any).requestId,
+            method: req.method,
+            path: req.path,
+            statusCode: res.statusCode,
+            duration,
+            userAgent: req.headers['user-agent']
+        }, 'Request completed');
+    });
+
     next();
 });
 
@@ -102,8 +126,10 @@ app.use('/api/scores', apiLimiter, scoreRoutes);
 app.use('/api/rankings', apiLimiter, rankingRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
 
+// CRITICAL: Global error handler (must be last)
+app.use(errorHandler);
 
 app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    logger.info({ port: PORT }, 'Server started successfully');
 });
 
