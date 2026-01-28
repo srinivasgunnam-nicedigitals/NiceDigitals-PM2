@@ -3,8 +3,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { backendApi } from './services/api';
 import { Project, User, UserRole, ProjectStage, ScoreEntry, DevPerformance, Priority, Comment, HistoryItem } from './types';
-import { SCORING_RULES, INITIAL_CHECKLISTS } from './constants';
-import { differenceInDays, isSameMonth, parseISO } from 'date-fns';
+import { INITIAL_CHECKLISTS } from './constants';
+import { isSameMonth } from 'date-fns';
 import type { Notification } from './components/NotificationPanel';
 import { useModal } from './hooks/useModal';
 
@@ -182,10 +182,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   });
 
-  const addScoreMutation = useMutation({
-    mutationFn: backendApi.addScore,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['scores'] })
-  });
+  // addScoreMutation removed - scores are now created server-side only
+  // via advanceProjectStage and recordQAFeedback endpoints
 
   // --- CONTEXT IMPLEMENTATION (Adapting to Mutations) ---
 
@@ -337,158 +335,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateUserMutation.mutate({ userId, updates });
   };
 
-  const recordQAFeedback = (id: string, passed: boolean, userId: string) => {
+  const recordQAFeedback = async (id: string, passed: boolean, userId: string) => {
     const project = projects.find(p => p.id === id);
     if (!project || !project.assignedDevManagerId) return;
 
-    if (passed) {
-      advanceStage(id, ProjectStage.ADMIN_REVIEW, userId);
-      if (project.qaFailCount === 0) {
-        // Add score for QA First Pass
-        addScoreMutation.mutate({
-          projectId: project.id,
-          userId: project.assignedDevManagerId,
-          points: SCORING_RULES.QA_FIRST_PASS,
-          reason: 'QA First Pass Bonus',
-          date: new Date().toISOString()
-        } as ScoreEntry);
-      }
-    } else {
-      // Failed
-      const snapshot = [...project.qaChecklist];
-      const resetQA = project.qaChecklist.map(i => ({ ...i, completed: false }));
+    try {
+      // Call backend API which handles:
+      // - Stage advancement (ADMIN_REVIEW on pass, DEVELOPMENT on fail)
+      // - QA fail count increment
+      // - Checklist resets
+      // - History entries
+      // - Score creation (server-side)
+      await backendApi.recordQAFeedback(id, passed);
 
-      const historyItem = {
-        stage: ProjectStage.QA,
-        timestamp: new Date().toISOString(),
-        userId,
-        action: 'QA Failed - Returned to Dev Manager',
-        rejectionSnapshot: snapshot
-      };
-
-      updateProjectMutation.mutate({
-        id,
-        updates: {
-          stage: ProjectStage.DEVELOPMENT,
-          qaFailCount: (project.qaFailCount || 0) + 1,
-          qaChecklist: resetQA, // Optional: Reset QA checklist or Dev checklist based on depth of failure
-          newHistoryItem: historyItem
-        }
-      });
-
-      // Deduction for failure
-      addScoreMutation.mutate({
-        projectId: project.id,
-        userId: project.assignedDevManagerId,
-        points: SCORING_RULES.QA_REJECTION,
-        reason: 'QA Rejection Penalty',
-        date: new Date().toISOString()
-      } as ScoreEntry);
+      // Invalidate queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['scores'] });
+    } catch (error: any) {
+      const msg = error.response?.data?.error || 'Failed to record QA feedback';
+      showAlert({ title: 'Error', message: msg, variant: 'error' });
     }
   };
 
+  // Manual regression is now deprecated in favor of QA flow, 
+  // but if needed, it should be a dedicated backend endpoint.
+  // For now, removing to enforce strict process.
   const regressToDev = (id: string, userId: string) => {
-    // This function might be deprecated in favor of recordQAFeedback(false) logic, 
-    // but kept if manual regression outside QA flow is needed.
-    const project = projects.find(p => p.id === id);
-    if (!project) return;
-
-    updateProjectMutation.mutate({
-      id,
-      updates: {
-        stage: ProjectStage.DEVELOPMENT,
-        newHistoryItem: {
-          stage: project.stage,
-          timestamp: new Date().toISOString(),
-          userId,
-          action: 'Sent back to Development (Manual)'
-        }
-      }
-    });
+    showAlert({ title: 'Deprecated', message: 'Use QA Feedback to return to development.', variant: 'info' });
   };
 
-  const advanceStage = (id: string, nextStage: ProjectStage, userId: string) => {
-    const project = projects.find(p => p.id === id);
-    if (!project) return;
+  const advanceStage = async (id: string, nextStage: ProjectStage, userId: string) => {
+    try {
+      // Call backend API which handles:
+      // - Stage transitions
+      // - Permission checks
+      // - History entries
+      // - Server-side scoring (points, bonuses, penalties)
+      await backendApi.advanceProjectStage(id, nextStage);
 
-    // Linear Progression Validation
-    // UPCOMING -> DESIGN -> DEVELOPMENT -> QA -> ADMIN_REVIEW -> COMPLETED
-    // Note: The UI usually supplies the correct 'nextStage', but we can enforce it if needed.
+      // Invalidate queries to refresh UI
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['scores'] });
 
-    const historyEntry = {
-      stage: project.stage,
-      timestamp: new Date().toISOString(),
-      userId,
-      action: `Transition to ${nextStage.replace(/_/g, ' ')}`
-    };
+      // Notifications logic should ideally be server-sent events or polled
+      // For now, we rely on the backend to handle the state, and polling/refetching updates the UI.
 
-    let completedAt = undefined;
-
-    // Scoring and Completion Logic
-    if (nextStage === ProjectStage.COMPLETED && project.assignedDevManagerId) {
-      const today = new Date();
-      const overallDeadline = parseISO(project.overallDeadline);
-
-      // Points for Delivery
-      addScoreMutation.mutate({
-        projectId: project.id,
-        userId: project.assignedDevManagerId,
-        points: SCORING_RULES.DELIVERY,
-        reason: 'Project Delivery',
-        date: today.toISOString()
-      } as ScoreEntry);
-
-      // Points for Schedule
-      let schedulePoints = 0;
-      let scheduleReason = '';
-
-      if (differenceInDays(overallDeadline, today) >= 0) {
-        schedulePoints = SCORING_RULES.ON_TIME;
-        scheduleReason = 'On-Time Bonus';
-      } else {
-        schedulePoints = SCORING_RULES.DEADLINE_MISSED;
-        scheduleReason = 'Deadline Missed Penalty';
-      }
-
-      addScoreMutation.mutate({
-        projectId: project.id,
-        userId: project.assignedDevManagerId,
-        points: schedulePoints,
-        reason: scheduleReason,
-        date: today.toISOString()
-      } as ScoreEntry);
-
-      completedAt = today.toISOString();
-    }
-
-    updateProjectMutation.mutate({
-      id,
-      updates: {
-        stage: nextStage,
-        completedAt,
-        newHistoryItem: historyEntry
-      }
-    });
-
-    // Notifications for Admins to assign roles
-    if (nextStage === ProjectStage.DESIGN || nextStage === ProjectStage.DEVELOPMENT || nextStage === ProjectStage.QA) {
-      const adminUsers = users.filter(u => u.role === UserRole.ADMIN);
-      const actionText = nextStage === ProjectStage.DESIGN ? 'Assign Designer' :
-        nextStage === ProjectStage.DEVELOPMENT ? 'Assign Developer' : 'Assign QA Engineer';
-
-      adminUsers.forEach(admin => {
-        // Avoid duplicate notifications in short succession if possible, but for now simple add
-        addNotification({
-          title: `Project Ready for ${nextStage}`,
-          message: `Project "${project.name}" has moved to ${nextStage}. Please ${actionText}.`,
-          type: 'assignment',
-          read: false, // Default
-          userId: admin.id // Assuming notification system handles filtering by user or logic needs update
-          // Note: Current local notification system is global for the browser session. 
-          // In a real app, this would be backend driven.
-          // We will simulate it by adding it to the context state.
-        });
-      });
+    } catch (error: any) {
+      const msg = error.response?.data?.error || 'Failed to advance project stage';
+      showAlert({ title: 'Error', message: msg, variant: 'error' });
     }
   };
 

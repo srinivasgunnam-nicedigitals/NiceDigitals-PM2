@@ -13,8 +13,12 @@ export const getScores = async (req: Request, res: Response) => {
                 }
             },
             include: {
-                project: true // Optional: Include project details if needed, or remove if too heavy
-            }
+                project: true
+            },
+            orderBy: {
+                date: 'desc'
+            },
+            take: 500 // Limit to recent 500 entries to prevent bloat
         });
 
         res.json(scores);

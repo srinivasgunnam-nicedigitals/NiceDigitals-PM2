@@ -13,7 +13,7 @@ export const getBootstrapData = async (req: Request, res: Response) => {
             });
         }
 
-        const [users, projects, scores] = await Promise.all([
+        const [users, projects] = await Promise.all([
             prisma.user.findMany({
                 where: { tenantId },
                 select: { // Exclude password
@@ -29,18 +29,14 @@ export const getBootstrapData = async (req: Request, res: Response) => {
                     assignedDesigner: true,
                     assignedDevManager: true,
                     assignedQA: true
-                }
-            }),
-            prisma.scoreEntry.findMany({
-                where: { project: { tenantId } },
-                include: { project: true }
+                },
+                take: 10 // Limit initial projects to 10 for speed
             })
         ]);
 
         res.json({
             users,
-            projects,
-            scores
+            projects
         });
 
     } catch (error) {

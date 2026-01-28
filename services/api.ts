@@ -66,7 +66,7 @@ export const backendApi = {
 
     // Bootstrap data (simulates initial load)
     getBootstrapData: async () => {
-        const response = await api.get<{ users: User[], projects: Project[], scores: ScoreEntry[] }>('/bootstrap');
+        const response = await api.get<{ users: User[], projects: Project[] }>('/bootstrap');
         return response.data;
     },
 
