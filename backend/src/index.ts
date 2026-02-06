@@ -14,6 +14,27 @@ import bootstrapRoutes from './routes/bootstrap.routes';
 dotenv.config();
 
 const app = express();
+
+// F-001: Security Headers
+import helmet from 'helmet';
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"], // No unsafe-inline
+            objectSrc: ["'none'"],
+            upgradeInsecureRequests: [],
+        }
+    },
+    hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: false
+    },
+    frameguard: {
+        action: 'deny' // Prevent clickjacking
+    }
+}));
 const PORT = process.env.PORT || 3001;
 
 // CRITICAL: Validate required environment variables at startup
@@ -36,6 +57,8 @@ const allowedOrigins = [
     'http://localhost:5173'
 ];
 
+import cookieParser from 'cookie-parser';
+
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps or curl requests)
@@ -48,20 +71,42 @@ app.use(cors({
         }
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    credentials: true,
+    credentials: true, // Required for cookies
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+app.use(cookieParser());
 
 // Rate Limiting
 // Rate Limiting
 import { rateLimit } from 'express-rate-limit';
+import RedisStore from 'rate-limit-redis';
+import Redis from 'ioredis';
+
+let limiterStore: any = undefined; // Default to MemoryStore
+
+if (process.env.REDIS_URL) {
+    const client = new Redis(process.env.REDIS_URL);
+    limiterStore = new RedisStore({
+        // @ts-expect-error - Known type mismatch between ioredis and rate-limit-redis
+        sendCommand: (...args: string[]) => client.call(...args),
+    });
+    logger.info('Using Redis for Rate Limiting');
+} else {
+    if (process.env.NODE_ENV === 'production') {
+        logger.fatal('CRITICAL: REDIS_URL missing in production. Distributed rate limiting is disabled.');
+        process.exit(1);
+    }
+    logger.warn('Redis not configured. Using in-memory rate limiting (Dev Only).');
+}
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 20, // Strict limit for auth/login
     standardHeaders: 'draft-7',
     legacyHeaders: false,
-    message: { error: 'Too many login attempts, please try again later.' }
+    message: { error: 'Too many login attempts, please try again later.' },
+    store: limiterStore as any
 });
 
 const apiLimiter = rateLimit({
@@ -69,6 +114,7 @@ const apiLimiter = rateLimit({
     limit: 300, // Relaxed limit for general API usage
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    store: limiterStore as any
 });
 
 app.use('/api/auth', authLimiter);
@@ -129,7 +175,20 @@ app.use('/api/notifications', apiLimiter, notificationRoutes);
 // CRITICAL: Global error handler (must be last)
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-    logger.info({ port: PORT }, 'Server started successfully');
-});
+import { emailService } from './services/email.service';
+
+const startServer = async () => {
+    // Audit Requirement: SMTP must be ready
+    const smtpReady = await emailService.verifyConnection();
+    if (!smtpReady) {
+        logger.fatal('Refusing to start: SMTP service unavailable. Fix credentials or network.');
+        process.exit(1);
+    }
+
+    app.listen(PORT, () => {
+        logger.info({ port: PORT }, 'Server started successfully');
+    });
+};
+
+startServer();
 

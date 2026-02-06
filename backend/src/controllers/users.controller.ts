@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import bcrypt from 'bcryptjs';
+import { logAudit } from '../utils/audit';
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
@@ -18,7 +19,6 @@ export const getUsers = async (req: Request, res: Response) => {
                 tenantId: true
             }
         });
-        console.log(`[DEBUG] getUsers for tenant ${tenantId}: Found ${users.length} users.`);
         res.json(users);
     } catch (error) {
         console.error('Get Users Error:', error);
@@ -26,49 +26,71 @@ export const getUsers = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * Create User - ADMIN ONLY
+ * Enforced by middleware, but double-checked here for safety.
+ */
 export const addUser = async (req: Request, res: Response) => {
     try {
         const tenantId = req.user?.tenantId;
+        // Double check Admin role just in case middleware is bypassed/misconfigured
+        if (req.user?.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Forbidden: Admins only' });
+        }
+
         if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
 
-        const u = req.body;
+        const { name, email, password, role, avatar } = req.body;
 
         // Validate required fields
-        if (!u.email || !u.name || !u.password || !u.role) {
+        if (!email || !name || !password || !role) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        const hashedPassword = await bcrypt.hash(u.password, 10);
+        // Validate Role enum
+        const validRoles = ['ADMIN', 'DESIGNER', 'DEV_MANAGER', 'QA_ENGINEER'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ error: 'Invalid role' });
+        }
 
-        // Use Prisma to create. it handles UUID default if ID is missing.
-        // If ID is provided (from frontend), it uses it.
-        const newUser = await prisma.user.create({
-            data: {
-                // If u.id is "u-...", Prisma might accept it if schema is String.
-                // But better to sanitize or let Backend generate if possible.
-                // For now, we spread u but overwrite critial fields.
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                role: u.role,
-                avatar: u.avatar,
-                tenantId: tenantId,
-                password: hashedPassword
-            },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                avatar: true,
-                tenantId: true
-            }
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Explicitly construct data object to prevent prototype pollution or extra field injection
+        const newUser = await prisma.$transaction(async (tx) => {
+            const user = await tx.user.create({
+                data: {
+                    name,
+                    email,
+                    password: hashedPassword,
+                    role, // Only Admins can set this, checked above
+                    avatar: avatar || null,
+                    tenantId
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    avatar: true,
+                    tenantId: true
+                }
+            });
+
+            await logAudit({
+                action: 'USER_CREATE',
+                target: `User: ${email}`,
+                actorId: req.user!.id,
+                actorEmail: req.user!.email,
+                tenantId,
+                metadata: { createdUserId: user.id, role }
+            }, tx);
+
+            return user;
         });
 
         res.json(newUser);
     } catch (error: any) {
         console.error('Add User Error:', error);
-        // Handle Unique Constraint Violation (P2002)
         if (error.code === 'P2002') {
             return res.status(409).json({ error: 'Email already exists' });
         }
@@ -76,77 +98,169 @@ export const addUser = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * Delete User - ADMIN ONLY
+ */
 export const deleteUser = async (req: Request, res: Response) => {
     try {
         const tenantId = req.user?.tenantId;
+        if (req.user?.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Forbidden: Admins only' });
+        }
         if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
 
         const { id } = req.params;
 
-        await prisma.user.deleteMany({
-            where: {
-                id,
-                tenantId
+        // Prevent deleting yourself
+        if (id === req.user?.id) {
+            return res.status(400).json({ error: 'Cannot delete your own account' });
+        }
+
+        await prisma.$transaction(async (tx) => {
+            const result = await tx.user.deleteMany({
+                where: {
+                    id,
+                    tenantId
+                }
+            });
+
+            if (result.count === 0) {
+                throw new Error('User not found');
             }
+
+            await logAudit({
+                action: 'USER_DELETE',
+                target: `User ID: ${id}`,
+                actorId: req.user!.id,
+                actorEmail: req.user!.email,
+                tenantId,
+                metadata: { deletedUserId: id }
+            }, tx);
         });
 
         res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
+        if (error.message === 'User not found') {
+            return res.status(404).json({ error: 'User not found' });
+        }
         console.error('Delete User Error:', error);
+        res.status(500).json({ error: 'Failed to delete user' });
     }
 };
 
+/**
+ * Update User - Self or Admin
+ * - Admins can update anyone (including Roles)
+ * - Users can update only themselves (Name/Avatar/Email only, NO ROLE)
+ */
 export const updateUser = async (req: Request, res: Response) => {
     try {
         const tenantId = req.user?.tenantId;
-        const userRole = req.user?.role;
-
-        if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
-
-        // Only admins can update users
-        if (userRole !== 'ADMIN') {
-            return res.status(403).json({ error: 'Forbidden: Only admins can update users' });
-        }
-
+        const operatorRole = req.user?.role;
+        const operatorId = req.user?.id;
         const { id } = req.params;
-        const { name, email, role } = req.body;
 
-        // Build update data object with only provided fields
-        const updateData: any = {};
-        if (name !== undefined) updateData.name = name;
-        if (email !== undefined) updateData.email = email;
-        if (role !== undefined) updateData.role = role;
+        if (!tenantId || !operatorId) return res.status(401).json({ error: 'Unauthorized' });
 
-        // Update user only if they belong to the same tenant
-        const updatedUser = await prisma.user.updateMany({
-            where: {
-                id,
-                tenantId
-            },
-            data: updateData
-        });
+        // Check permissions
+        const isSelf = id === operatorId;
+        const isAdmin = operatorRole === 'ADMIN';
 
-        if (updatedUser.count === 0) {
-            return res.status(404).json({ error: 'User not found' });
+        if (!isSelf && !isAdmin) {
+            return res.status(403).json({ error: 'Forbidden: You can only update your own profile' });
         }
 
-        // Fetch and return the updated user
-        const user = await prisma.user.findUnique({
-            where: { id },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                avatar: true,
-                tenantId: true
+        const { name, email, role, avatar } = req.body;
+
+        // Build allowed updates
+        const updateData: any = {};
+
+        // Name and Avatar: Allowed for Self and Admin
+        if (name !== undefined) updateData.name = name;
+        if (avatar !== undefined) updateData.avatar = avatar;
+
+        // Email: Admin Only ? (Per common SaaS rules, usually Admin only or Email Verification required)
+        // Original code said "Only admins can change email". Let's stick to that strict rule for now.
+        // Or if audit said "Users - Update Self", name/avatar is standard.
+        // Let's allow users to update email for now but secure it if needed later.
+        // Actually, changing email might require verification. Let's restrict `email` to Admin for safety,
+        // OR allow self-change if we trust they own the session.
+        // Detailed Audit: "Restricting email changes so that only administrative users can modify...".
+        // Conversation 86d38edc confirms: "Restricting email changes so that only administrative users...".
+        // SO: Email is ADMIN ONLY.
+        if (email !== undefined) {
+            if (isAdmin) {
+                updateData.email = email;
+            } else {
+                // User trying to change email -> forbidden or ignored
+                // res.status(403) is cleaner
+                return res.status(403).json({ error: 'Only admins can change email addresses' });
             }
+        }
+
+        // Role: ADMIN ONLY
+        if (role !== undefined) {
+            if (isAdmin) {
+                updateData.role = role;
+            } else {
+                return res.status(403).json({ error: 'Forbidden: You can cannot change roles' });
+            }
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: 'No valid fields to update' });
+        }
+
+        // TRANSACTIONAL MUTATION & AUDIT
+        const user = await prisma.$transaction(async (tx) => {
+            // Perform Update
+            const updatedUser = await tx.user.updateMany({
+                where: {
+                    id,
+                    tenantId
+                },
+                data: updateData
+            });
+
+            if (updatedUser.count === 0) {
+                // Throw to abort transaction
+                throw new Error('User not found');
+            }
+
+            // Return updated user
+            const fetchedUser = await tx.user.findUnique({
+                where: { id },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    avatar: true,
+                    tenantId: true
+                }
+            });
+
+            if (!fetchedUser) throw new Error('User not found after update');
+
+            // AUDIT: Log Update (Fail-Closed)
+            await logAudit({
+                action: 'USER_UPDATED',
+                target: `User: ${fetchedUser.email}`,
+                actorId: operatorId,
+                actorEmail: req.user?.email, // Safe per middleware
+                tenantId: tenantId,
+                metadata: {
+                    updatedFields: Object.keys(updateData),
+                    targetUserId: id
+                }
+            }, tx);
+
+            return fetchedUser;
         });
 
         res.json(user);
     } catch (error: any) {
         console.error('Update User Error:', error);
-        // Handle Unique Constraint Violation (P2002) for email
         if (error.code === 'P2002') {
             return res.status(409).json({ error: 'Email already exists' });
         }

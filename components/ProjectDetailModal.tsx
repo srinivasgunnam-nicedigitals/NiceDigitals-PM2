@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
+import { backendApi } from '../services/api';
 
 import { Project, ProjectStage, UserRole, Comment } from '../types';
 import { useApp } from '../store';
@@ -23,6 +25,12 @@ const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClos
   const { addComment, users, currentUser } = useApp();
   const [commentText, setCommentText] = useState('');
 
+  const { data: commentsResponse, isLoading } = useQuery({
+    queryKey: ['project-comments', project.id],
+    queryFn: () => backendApi.getProjectComments(project.id, 1, 100) // Access first 100 comments
+  });
+  const comments = commentsResponse?.data || [];
+
   const handlePost = (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
@@ -40,32 +48,32 @@ const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClos
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {(!project.comments || project.comments.length === 0) ? (
-          <div className="h-full flex flex-col items-center justify-center opacity-40 grayscale">
-            <MessageSquare className="w-8 h-8 mb-2 text-slate-300" />
-            <p className="text-[11px] font-bold uppercase tracking-widest text-center">No discussion yet</p>
-          </div>
-        ) : (
-          project.comments.map((comment: Comment) => {
-            const author = users.find(u => u.id === comment.userId);
-            const isMe = comment.userId === currentUser?.id;
-            return (
-              <div key={comment.id} className="flex flex-col gap-1.5 animate-saas-fade">
-                <div className="flex items-center gap-2">
+        {isLoading ? <div className="p-4 text-center text-slate-400">Loading discussion...</div> :
+          (!comments || comments.length === 0) ? (
+            <div className="h-full flex flex-col items-center justify-center opacity-40 grayscale">
+              <MessageSquare className="w-8 h-8 mb-2 text-slate-300" />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-center">No discussion yet</p>
+            </div>
+          ) : (
+            comments.map((comment: Comment) => {
+              const author = users.find(u => u.id === comment.userId);
+              const isMe = comment.userId === currentUser?.id;
+              return (
+                <div key={comment.id} className="flex flex-col gap-1.5 animate-saas-fade">
+                  <div className="flex items-center gap-2">
 
-                  {/* The following line was malformed in the instruction and has been corrected to maintain existing structure. */}
-                  <img src={author?.avatar} className="w-5 h-5 rounded" alt="" />
-                  <span className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{author?.name}</span>
-                  <span className="text-[10px] font-medium text-slate-400">{format(parseISO(comment.timestamp), 'h:mm a')}</span>
+                    <img src={author?.avatar} className="w-5 h-5 rounded" alt="" />
+                    <span className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{author?.name}</span>
+                    <span className="text-[10px] font-medium text-slate-400">{format(parseISO(comment.timestamp), 'h:mm a')}</span>
+                  </div>
+                  <div className={`px-4 py-2.5 rounded-lg text-[13px] font-medium leading-relaxed border ${isMe ? 'bg-white dark:bg-slate-800 border-indigo-100 dark:border-indigo-900/50 text-slate-800 dark:text-slate-200 shadow-sm' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                    }`}>
+                    {comment.text}
+                  </div>
                 </div>
-                <div className={`px-4 py-2.5 rounded-lg text-[13px] font-medium leading-relaxed border ${isMe ? 'bg-white dark:bg-slate-800 border-indigo-100 dark:border-indigo-900/50 text-slate-800 dark:text-slate-200 shadow-sm' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                  }`}>
-                  {comment.text}
-                </div>
-              </div>
-            );
-          })
-        )}
+              );
+            })
+          )}
       </div>
 
       <div className="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
@@ -90,7 +98,19 @@ const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClos
   );
 };
 
-export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project, onClose }) => {
+export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project: initialProject, onClose }) => {
+  const { data: project } = useQuery({
+    queryKey: ['project', initialProject.id],
+    queryFn: () => backendApi.getProject(initialProject.id),
+    initialData: initialProject
+  });
+
+  const { data: historyResponse } = useQuery({
+    queryKey: ['project-history', initialProject.id],
+    queryFn: () => backendApi.getProjectHistory(initialProject.id, 1, 100)
+  });
+  const history = historyResponse?.data || [];
+
   const { updateProject, advanceStage, recordQAFeedback, deleteProject, currentUser, users, archiveProject } = useApp();
   const { showConfirm, showPrompt } = useModal();
   const [activeTab, setActiveTab] = useState<'checklist' | 'details' | 'history'>('checklist');
@@ -563,9 +583,9 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project,
 
             {activeTab === 'history' && (
               <div className="max-w-2xl mx-auto space-y-6">
-                {project.history.map((h, i) => (
+                {history.map((h, i) => (
                   <div key={i} className="flex gap-4 relative">
-                    {i !== project.history.length - 1 && <div className="absolute left-3.5 top-8 bottom-0 w-px bg-slate-200 dark:bg-slate-700"></div>}
+                    {i !== history.length - 1 && <div className="absolute left-3.5 top-8 bottom-0 w-px bg-slate-200 dark:bg-slate-700"></div>}
                     <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center shrink-0 relative z-10">
                       <Clock size={12} className="text-slate-500 dark:text-slate-400" />
                     </div>

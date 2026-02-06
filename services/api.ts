@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Project, User, ScoreEntry, Comment } from '../types';
+import { Project, User, ScoreEntry, Comment, HistoryItem } from '../types';
 
 // Create axios instance with base URL from environment variable
 const api = axios.create({
@@ -9,13 +9,11 @@ const api = axios.create({
     },
 });
 
-// Add a request interceptor to attach the JWT token
+// Add a request interceptor
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem('token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
+        config.withCredentials = true; // Ensure cookies are sent
+        // No longer injecting token from localStorage
         return config;
     },
     (error) => {
@@ -28,10 +26,10 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response && error.response.status === 401) {
-            // Token is invalid or expired
-            // Token is invalid or expired. Clearing session.
-            localStorage.removeItem('token');
-            localStorage.removeItem('nice_digital_current_user_v4'); // Clear user cache
+            // Token is invalid or expired.
+            // With HttpOnly cookies, we can't clear the token client-side,
+            // but the server should have cleared it or it's invalid anyway.
+            localStorage.removeItem('nice_digital_current_user_v4'); // Clear user cache if preferred
 
             // Prevent infinite redirect loop if already on login
             if (!window.location.pathname.includes('/login')) {
@@ -71,9 +69,14 @@ export const backendApi = {
     },
 
     // Projects
-    getProjects: async () => {
-        const response = await api.get<{ data: Project[], meta: any }>('/projects');
-        return response.data.data; // Extract the data array from paginated response
+    getProjects: async (page = 1, limit = 10) => {
+        const response = await api.get<{ data: Project[], meta: any }>(`/projects?page=${page}&limit=${limit}`);
+        return response.data; // Returns { data: [...], meta: {...} }
+    },
+
+    getProject: async (id: string) => {
+        const response = await api.get<Project>(`/projects/${id}`);
+        return response.data;
     },
 
     createProject: async (project: Partial<Project>) => {
@@ -88,6 +91,16 @@ export const backendApi = {
 
     deleteProject: async (id: string) => {
         const response = await api.delete(`/projects/${id}`);
+        return response.data;
+    },
+
+    getProjectHistory: async (id: string, page = 1, limit = 50) => {
+        const response = await api.get<{ data: HistoryItem[], meta: any }>(`/projects/${id}/history?page=${page}&limit=${limit}`);
+        return response.data;
+    },
+
+    getProjectComments: async (id: string, page = 1, limit = 50) => {
+        const response = await api.get<{ data: Comment[], meta: any }>(`/projects/${id}/comments?page=${page}&limit=${limit}`);
         return response.data;
     },
 

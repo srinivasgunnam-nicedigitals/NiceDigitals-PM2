@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { logAudit } from '../utils/audit';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 if (!JWT_SECRET) {
@@ -9,7 +10,16 @@ if (!JWT_SECRET) {
     // We already check in index.ts but this satisfies TS
 }
 
+// Helper for constant-time comparison
+const DUMMY_HASH = '$2a$10$z.XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'; // 60 chars
+const MIN_LOGIN_TIME_MS = 300; // Minimum time to wait before response
+import crypto from 'crypto'; // F-006: Required for token hashing
+
+// Helper sleep function
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const login = async (req: Request, res: Response) => {
+    const start = Date.now();
     try {
         const { email, password } = req.body;
 
@@ -17,31 +27,52 @@ export const login = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Email and password are required' });
         }
 
-        // 1. Find User using Prisma
+        // 1. Find User (or simulate find)
         const user = await prisma.user.findUnique({
             where: { email }
         });
 
-        if (!user) {
+        // 2. Validate Password (ALWAYS execute compare to prevent timing attacks)
+        // If user is missing, compare against dummy hash
+        const targetHash = user?.password || DUMMY_HASH;
+        const isValid = await bcrypt.compare(password, targetHash);
+
+        // Normalize execution time to mitigate timing attacks on "User Found" vs "User Not Found" lookup
+        // Prisma lookup + bcrypt should be roughly dominated by bcrypt.
+        // We add a random jitter or fixed floor to mask db query time diffs if any.
+        const elapsed = Date.now() - start;
+        const remaining = MIN_LOGIN_TIME_MS - elapsed;
+        if (remaining > 0) {
+            await sleep(remaining);
+        }
+
+        // 3. Check Validity (User must exist AND password must match)
+        if (!user || !user.password || !isValid) {
+            // AUDIT: Log failure if user is resolvable
+            if (user) {
+                await logAudit({
+                    action: 'LOGIN_FAILURE',
+                    target: 'User Login',
+                    actorId: user.id,
+                    actorEmail: user.email,
+                    tenantId: user.tenantId,
+                    metadata: { reason: 'Invalid Credentials' }
+                });
+            }
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        if (!user.password) {
-            // No password set (e.g. OAuth or invited state), deny.
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
+        // AUDIT: Log Success (Fail-Closed: Audit failure blocks login)
+        await logAudit({
+            action: 'LOGIN_SUCCESS',
+            target: 'User Login',
+            actorId: user.id,
+            actorEmail: user.email,
+            tenantId: user.tenantId,
+            metadata: { method: 'password' }
+        });
 
-        // 2. Validate Password
-        // All passwords MUST be bcrypt hashed
-        // If legacy migration is needed, run it via offline script, not in login flow
-        const isValid = await bcrypt.compare(password, user.password);
-
-        if (!isValid) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        // 3. Generate Token
-        // Prisma returns objects with correct casing defined in schema (tenantId)
+        // 4. Generate Token
         const token = jwt.sign(
             {
                 id: user.id,
@@ -53,12 +84,20 @@ export const login = async (req: Request, res: Response) => {
             { expiresIn: '24h' }
         );
 
-        // 4. Return User (without password) and Token
+        // 5. Set Cookie
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // true in prod
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        });
+
+        // 6. Return User (without password/token in body)
         const { password: _, ...userWithoutPassword } = user;
 
         res.json({
             user: userWithoutPassword,
-            token
+            // token: token // Removed from body to force cookie usage
         });
 
     } catch (error: any) {
@@ -91,13 +130,14 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
         if (!user) {
             return res.json({
                 message: 'If the email exists, a reset code has been generated',
-                // Don't reveal that user doesn't exist
             });
         }
 
-        // Generate a cryptographically secure 6-digit token
-        const crypto = require('crypto');
-        const token = crypto.randomInt(100000, 1000000).toString();
+        // F-006: Generate cryptographically secure random token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+
+        // F-006: Hash the token before storage using SHA-256
+        const tokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
 
         // Set expiration to 1 hour from now
         const expiresAt = new Date();
@@ -111,27 +151,36 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
             }
         });
 
-        // Create new reset token
+        // Create new reset token (Store HASH only)
         await prisma.passwordResetToken.create({
             data: {
-                token,
+                tokenHash, // Remediated
                 expiresAt,
                 userId: user.id
             }
         });
 
-        // Send email using the email service
-        const emailSent = await emailService.sendPasswordResetEmail(email, token);
+        // Send email using the email service (Send RAW token)
+        const emailSent = await emailService.sendPasswordResetEmail(email, resetToken);
 
         if (emailSent) {
+            // Log success but NEVER log the token
             console.log(`[PASSWORD RESET] Email sent to ${email}`);
+
+            // AUDIT: Log Request (Fail-Closed: Audit failure blocks response)
+            await logAudit({
+                action: 'PASSWORD_RESET_REQUESTED',
+                target: `User: ${email}`,
+                actorId: user.id,
+                actorEmail: user.email,
+                tenantId: user.tenantId,
+            });
+
             res.json({
                 message: 'If the email exists, a reset code has been sent to your email',
             });
         } else {
             console.error(`[PASSWORD RESET] Failed to send email to ${email}`);
-            // In a real app, maybe return 500, but for security we might still want to show success or a generic error
-            // For now, let's return success to not leak implementation details, but log the error
             res.json({
                 message: 'If the email exists, a reset code has been generated',
             });
@@ -165,10 +214,13 @@ export const resetPassword = async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Invalid or expired reset token' });
         }
 
-        // Find valid reset token
+        // F-006: Hash provided token to match stored hash
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+        // Find valid reset token by HASH
         const resetToken = await prisma.passwordResetToken.findFirst({
             where: {
-                token,
+                tokenHash, // Match against hash
                 userId: user.id,
                 used: false,
                 expiresAt: {
@@ -184,19 +236,32 @@ export const resetPassword = async (req: Request, res: Response) => {
         // Hash the new password
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        // Update user password
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { password: hashedPassword }
-        });
+        // TRANSACTIONAL MUTATION & AUDIT
+        await prisma.$transaction(async (tx) => {
+            // Update user password
+            await tx.user.update({
+                where: { id: user.id },
+                data: { password: hashedPassword }
+            });
 
-        // Mark token as used
-        await prisma.passwordResetToken.update({
-            where: { id: resetToken.id },
-            data: { used: true }
-        });
+            // Mark token as used
+            await tx.passwordResetToken.update({
+                where: { id: resetToken.id },
+                data: { used: true }
+            });
 
-        console.log(`[PASSWORD RESET] Password successfully reset for user ${email}`);
+            console.log(`[PASSWORD RESET] Password successfully reset for user ${email}`);
+
+            // AUDIT: Log Completion (Fail-Closed)
+            await logAudit({
+                action: 'PASSWORD_RESET_COMPLETED',
+                target: `User: ${user.email}`,
+                actorId: user.id,
+                actorEmail: user.email,
+                tenantId: user.tenantId,
+                metadata: { method: 'token' }
+            }, tx);
+        });
 
         res.json({ message: 'Password has been reset successfully' });
 
@@ -242,13 +307,25 @@ export const changePassword = async (req: Request, res: Response) => {
         // Hash new password
         const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-        // Update password
-        await prisma.user.update({
-            where: { id: userId },
-            data: { password: hashedPassword }
-        });
+        // TRANSACTIONAL MUTATION & AUDIT
+        await prisma.$transaction(async (tx) => {
+            // Update password
+            await tx.user.update({
+                where: { id: userId },
+                data: { password: hashedPassword }
+            });
 
-        console.log(`[AUTH] Password changed successfully for user ${userId}`);
+            console.log(`[AUTH] Password changed successfully for user ${userId}`);
+
+            // AUDIT: Log Change (Fail-Closed)
+            await logAudit({
+                action: 'PASSWORD_CHANGED',
+                target: 'User Password Change',
+                actorId: userId,
+                actorEmail: user.email,
+                tenantId: user.tenantId
+            }, tx);
+        });
 
         res.json({ message: 'Password changed successfully' });
 

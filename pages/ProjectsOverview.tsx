@@ -5,7 +5,7 @@ import { useApp } from '../store';
 import { useModal } from '../hooks/useModal';
 import { Project, ProjectStage, UserRole } from '../types';
 import { format, parseISO } from 'date-fns';
-import { Search, Filter, ArrowRight, User as UserIcon, Calendar, Clock, ArrowUpDown, ArrowUp, ArrowDown, Inbox, Archive, Plus, Trash2 } from 'lucide-react';
+import { Search, Filter, ArrowRight, User as UserIcon, Calendar, Clock, ArrowUpDown, ArrowUp, ArrowDown, Inbox, Archive, Plus, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { STAGE_CONFIG } from '../constants';
 import { ProjectDetailModal } from '../components/ProjectDetailModal';
 import { EmptyState } from '../components/EmptyState';
@@ -15,7 +15,7 @@ type SortField = 'client' | 'deadline';
 type SortOrder = 'asc' | 'desc';
 
 const ProjectsOverview = () => {
-  const { projects, users, clients, isLoading, archiveProject, currentUser, deleteProject } = useApp();
+  const { projects, users, clients, isLoading, archiveProject, currentUser, deleteProject, page, setPage, paginationMeta } = useApp();
   const { showConfirm, showPrompt } = useModal();
   const { onAddProject } = useOutletContext<{ onAddProject: () => void }>();
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -251,6 +251,34 @@ const ProjectsOverview = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {paginationMeta.totalPages > 1 && (
+            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+              <div className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">
+                Showing <span className="font-bold text-slate-900 dark:text-slate-100">{((page - 1) * paginationMeta.limit) + 1}</span> to <span className="font-bold text-slate-900 dark:text-slate-100">{Math.min(page * paginationMeta.limit, paginationMeta.total)}</span> of <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.total}</span> results
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <div className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[13px] font-bold text-slate-700 dark:text-slate-300 shadow-sm">
+                  Page {page} of {paginationMeta.totalPages}
+                </div>
+                <button
+                  onClick={() => setPage(Math.min(paginationMeta.totalPages, page + 1))}
+                  disabled={page === paginationMeta.totalPages}
+                  className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
           )}
         </div>

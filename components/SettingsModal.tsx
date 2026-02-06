@@ -50,16 +50,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleSave = () => {
-        if (currentUser) {
-            setCurrentUser({
-                ...currentUser,
-                name: formData.name,
-                email: formData.email,
-                avatar: formData.avatar
-            });
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSave = async () => {
+        if (!currentUser) return;
+
+        setIsSaving(true);
+        try {
+            const updates: any = {};
+
+            // Only send fields that actually changed or are allowed
+            if (formData.name !== currentUser.name) updates.name = formData.name;
+            if (formData.avatar !== currentUser.avatar) updates.avatar = formData.avatar;
+
+            // Only send email if Admin (Backend rejects otherwise)
+            // And only if it actually changed
+            if (currentUser.role === 'ADMIN' && formData.email !== currentUser.email) {
+                updates.email = formData.email;
+            }
+
+            if (Object.keys(updates).length === 0) {
+                onClose(); // No changes
+                return;
+            }
+
+            const updatedUser = await backendApi.updateUser(currentUser.id, updates);
+
+            // Update local state and storage
+            setCurrentUser(updatedUser);
+
+            // Update storage immediately to keep sync
+            localStorage.setItem('nice_digital_current_user_v4', JSON.stringify(updatedUser));
+
+            onClose();
+        } catch (error: any) {
+            console.error('Failed to update profile:', error);
+            const msg = error.response?.data?.error || 'Failed to update profile';
+            alert(msg); // Simple alert for now as per existing pattern
+        } finally {
+            setIsSaving(false);
         }
-        onClose();
     };
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -452,7 +482,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         onClick={handleSave}
                     >
                         <Check size={16} />
-                        Save Changes
+                        {isSaving ? 'Saving...' : 'Save Changes'}
                     </Button>
                 </div>
             </div>

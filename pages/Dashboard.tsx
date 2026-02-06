@@ -325,7 +325,7 @@ const KanbanColumn = ({ stage, projects, onProjectClick, onAddProject }: KanbanC
 };
 
 const RoleSpecificDashboard = () => {
-  const { currentUser, projects, isLoading, users, bulkUpdateStage, bulkAssignUser, bulkArchiveProjects, bulkDeleteProjects } = useApp();
+  const { currentUser, projects, isLoading, users, bulkUpdateStage, bulkAssignUser, bulkArchiveProjects, bulkDeleteProjects, page, setPage, paginationMeta } = useApp();
   const { theme } = useTheme();
   const [viewMode, setViewMode] = useState<'board' | 'grid'>('board');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -483,7 +483,7 @@ const RoleSpecificDashboard = () => {
           )}
         </div>
       </div>
-      
+
       {selectedProject && <ProjectDetailModal project={selectedProject} onClose={() => setSelectedProjectId(null)} />}
 
       {selectedProjects.size > 0 && (
@@ -497,6 +497,64 @@ const RoleSpecificDashboard = () => {
           users={users}
         />
       )}
+
+      {/* Pagination Toolbar */}
+      <div className="sticky bottom-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 p-4 shadow-lg z-20">
+        <div className="max-w-[1400px] mx-auto flex items-center justify-between">
+          <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+            Showing page <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.page}</span> of <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.totalPages}</span>
+            <span className="mx-2">•</span>
+            Total <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.total}</span> projects
+          </span>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={page === 1}
+              onClick={() => setPage(Math.max(1, page - 1))}
+            >
+              Previous
+            </Button>
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, paginationMeta.totalPages) }, (_, i) => {
+                // Logic to show generic page window, simple for now: 1..5 or around current
+                // For sprint speed, just show generic range or simple dots if huge.
+                // Actually, let's keep it simple: Just Next/Prev is sufficient for "Visibility".
+                // Numbered pages nice to have but trickier logic.
+                // Let's just do numbers if totalPages < 10, else simple.
+
+                let pNum = i + 1;
+                if (paginationMeta.totalPages > 5 && page > 3) {
+                  pNum = page - 2 + i;
+                }
+                if (pNum > paginationMeta.totalPages) return null;
+
+                return (
+                  <button
+                    key={pNum}
+                    onClick={() => setPage(pNum)}
+                    className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${page === pNum
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      }`}
+                  >
+                    {pNum}
+                  </button>
+                );
+              })}
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={page >= paginationMeta.totalPages}
+              onClick={() => setPage(page + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

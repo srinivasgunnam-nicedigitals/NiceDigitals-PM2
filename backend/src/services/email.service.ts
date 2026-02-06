@@ -39,5 +39,16 @@ export const emailService = {
             // Don't throw, just return false so we don't crash requests
             return false;
         }
+    },
+
+    verifyConnection: async () => {
+        try {
+            await transporter.verify();
+            console.log('[EMAIL] SMTP connection established successfully');
+            return true;
+        } catch (error) {
+            console.error('[EMAIL] FATAL: Unable to connect to SMTP server:', error);
+            return false;
+        }
     }
 };

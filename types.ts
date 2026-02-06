@@ -78,12 +78,12 @@ export interface Project {
   qaChecklist: ChecklistItem[];
   finalChecklist: ChecklistItem[];
 
-  comments: Comment[];
+  comments?: Comment[];
 
   isDelayed: boolean;
   qaFailCount: number;
 
-  history: HistoryItem[];
+  history?: HistoryItem[];
 
   createdAt: string;
   completedAt?: string;

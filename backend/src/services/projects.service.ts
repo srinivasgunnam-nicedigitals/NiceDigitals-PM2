@@ -12,6 +12,16 @@ const SCORING_RULES = {
     DELAY_PER_DAY: -2,
 };
 
+export const VALID_TRANSITIONS: Record<string, string[]> = {
+    'UPCOMING': ['DESIGN'],
+    'DESIGN': ['DEVELOPMENT'],
+    'DEVELOPMENT': ['QA'],
+    'QA': ['ADMIN_REVIEW', 'DEVELOPMENT'], // QA can go to Admin Review (Pass) or Dev (Fail)
+    'ADMIN_REVIEW': ['COMPLETED', 'SENT_TO_CLIENT'], // Allow flexibility if needed, but strict based on FE
+    'SENT_TO_CLIENT': ['COMPLETED'],
+    'COMPLETED': ['ADMIN_REVIEW'] // Allow Unarchive
+};
+
 interface AdvanceStageParams {
     projectId: string;
     nextStage: string;
@@ -41,6 +51,12 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
 
     if (!project) {
         throw new Error('Project not found or access denied');
+    }
+
+    // State Machine Validation
+    const allowed = VALID_TRANSITIONS[project.stage] || [];
+    if (!allowed.includes(nextStage)) {
+        throw new Error(`Invalid stage transition: Cannot move from ${project.stage} to ${nextStage}`);
     }
 
     // Create history entry
@@ -108,8 +124,6 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
                 completedAt: completedAt || undefined,
             },
             include: {
-                comments: true,
-                history: true,
                 assignedDesigner: true,
                 assignedDevManager: true,
                 assignedQA: true
@@ -119,7 +133,6 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
         // Create history entry
         await tx.historyItem.create({
             data: {
-                id: `h-${Date.now()}-${Math.random()}`,
                 stage: historyEntry.stage,
                 action: historyEntry.action,
                 timestamp: historyEntry.timestamp,
@@ -133,7 +146,6 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
         for (const score of scoresToCreate) {
             await tx.scoreEntry.create({
                 data: {
-                    id: `s-${Date.now()}-${Math.random()}`,
                     ...score
                 }
             });
@@ -165,6 +177,10 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
         throw new Error('Project has no assigned dev manager');
     }
 
+    if (project.stage !== 'QA') {
+        throw new Error('QA Feedback can only be recorded when project is in QA stage');
+    }
+
     if (passed) {
         // QA Passed - advance to ADMIN_REVIEW
         const scoresToCreate: any[] = [];
@@ -189,8 +205,6 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
                     stage: 'ADMIN_REVIEW'
                 },
                 include: {
-                    comments: true,
-                    history: true,
                     assignedDesigner: true,
                     assignedDevManager: true,
                     assignedQA: true
@@ -200,7 +214,6 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
             // Create history
             await tx.historyItem.create({
                 data: {
-                    id: `h-${Date.now()}-${Math.random()}`,
                     stage: 'QA',
                     action: 'QA Passed - Advanced to Admin Review',
                     timestamp: new Date().toISOString(),
@@ -214,7 +227,6 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
             for (const score of scoresToCreate) {
                 await tx.scoreEntry.create({
                     data: {
-                        id: `s-${Date.now()}-${Math.random()}`,
                         ...score
                     }
                 });
@@ -240,8 +252,6 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
                     qaChecklist: resetQA as any
                 },
                 include: {
-                    comments: true,
-                    history: true,
                     assignedDesigner: true,
                     assignedDevManager: true,
                     assignedQA: true
@@ -251,7 +261,6 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
             // Create history with rejection snapshot
             await tx.historyItem.create({
                 data: {
-                    id: `h-${Date.now()}-${Math.random()}`,
                     stage: 'QA',
                     action: 'QA Failed - Returned to Dev Manager',
                     timestamp: new Date().toISOString(),
@@ -265,7 +274,6 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
             // Create penalty score
             await tx.scoreEntry.create({
                 data: {
-                    id: `s-${Date.now()}-${Math.random()}`,
                     projectId: project.id,
                     userId: project.assignedDevManagerId!,
                     points: SCORING_RULES.QA_REJECTION,

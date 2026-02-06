@@ -21,8 +21,8 @@ export const Login = () => {
         setError('');
 
         try {
-            const { user, token } = await backendApi.login(email, password);
-            localStorage.setItem('token', token);
+            const { user } = await backendApi.login(email, password);
+            // localStorage.setItem('token', token); // Token is now in cookie
             setCurrentUser(user);
             navigate('/dashboard');
         } catch (err: any) {

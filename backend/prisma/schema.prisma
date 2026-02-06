@@ -47,15 +47,35 @@ model Tenant {
   history   HistoryItem[]
   scores    ScoreEntry[]
   notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  target    String   // Description or ID of target
+  actorId   String
+  actorEmail String?
+  timestamp DateTime @default(now())
+  metadata  Json?
+
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([timestamp])
 }
 
 model User {
   id        String   @id @default(uuid())
   name      String
   email     String   @unique
-  password  String?  // Optional for now to support existing mock data import
+  password  String   // F-002: Remediation - Mandatory Password
   role      UserRole
   avatar    String?
+
+  isActive          Boolean   @default(true)
+  lastRevocationAt  DateTime? // Comparing with JWT iat ensures revocation works without changing auth controller
 
   tenantId  String
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
@@ -73,7 +93,7 @@ model User {
 
 model PasswordResetToken {
   id        String   @id @default(uuid())
-  token     String   @unique
+  tokenHash String   @unique // F-006: Remediation - Store Hash Only
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -81,7 +101,7 @@ model PasswordResetToken {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([token])
+  @@index([tokenHash])
   @@index([userId])
 }
 
