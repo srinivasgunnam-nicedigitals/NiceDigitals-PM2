@@ -1,8 +1,8 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
-import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { logAudit } from '../utils/audit';
+import { passwordService } from '../services/password.service';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 if (!JWT_SECRET) {
@@ -35,7 +35,7 @@ export const login = async (req: Request, res: Response) => {
         // 2. Validate Password (ALWAYS execute compare to prevent timing attacks)
         // If user is missing, compare against dummy hash
         const targetHash = user?.password || DUMMY_HASH;
-        const isValid = await bcrypt.compare(password, targetHash);
+        const isValid = await passwordService.compare(password, targetHash);
 
         // Normalize execution time to mitigate timing attacks on "User Found" vs "User Not Found" lookup
         // Prisma lookup + bcrypt should be roughly dominated by bcrypt.
@@ -234,7 +234,7 @@ export const resetPassword = async (req: Request, res: Response) => {
         }
 
         // Hash the new password
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await passwordService.hash(newPassword);
 
         // TRANSACTIONAL MUTATION & AUDIT
         await prisma.$transaction(async (tx) => {
@@ -299,13 +299,13 @@ export const changePassword = async (req: Request, res: Response) => {
         }
 
         // Verify current password
-        const isValidCurrentPassword = await bcrypt.compare(currentPassword, user.password);
+        const isValidCurrentPassword = await passwordService.compare(currentPassword, user.password);
         if (!isValidCurrentPassword) {
             return res.status(401).json({ error: 'Current password is incorrect' });
         }
 
         // Hash new password
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        const hashedPassword = await passwordService.hash(newPassword);
 
         // TRANSACTIONAL MUTATION & AUDIT
         await prisma.$transaction(async (tx) => {

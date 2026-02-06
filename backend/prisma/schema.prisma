@@ -66,6 +66,17 @@ model AuditLog {
   @@index([timestamp])
 }
 
+model AuditOutbox {
+  id        String   @id @default(uuid())
+  action    String
+  target    String
+  actorId   String
+  actorEmail String?
+  tenantId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -146,6 +157,7 @@ model Project {
 
   @@index([tenantId])
   @@index([assignedDevManagerId])
+  @@index([tenantId, createdAt])
 }
 
 model Comment {
@@ -194,6 +206,7 @@ model ScoreEntry {
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId, userId])
+  @@index([tenantId, date])
 }
 
 model Notification {
@@ -212,4 +225,5 @@ model Notification {
 
   @@index([userId])
   @@index([tenantId])
+  @@index([tenantId, timestamp])
 }

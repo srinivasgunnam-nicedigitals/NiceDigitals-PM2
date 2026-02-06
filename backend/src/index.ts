@@ -177,6 +177,10 @@ app.use(errorHandler);
 
 import { emailService } from './services/email.service';
 
+// Start Background Workers
+import './workers/audit.worker';
+
+
 const startServer = async () => {
     // Audit Requirement: SMTP must be ready
     const smtpReady = await emailService.verifyConnection();

@@ -10,9 +10,12 @@ interface AuditParams {
 }
 
 export const logAudit = async (params: AuditParams, tx?: any, options?: { allowFailOpen?: boolean }) => {
+    // NEW: Write to Outbox (Fast, Heap Storage, No Index Overhead)
+    // This allows the user transaction to commit quickly.
+    // The background worker will move this to the heavy AuditLog table.
     try {
         const client = tx || prisma;
-        await client.auditLog.create({
+        await client.auditOutbox.create({
             data: {
                 action: params.action,
                 target: params.target,
@@ -20,11 +23,11 @@ export const logAudit = async (params: AuditParams, tx?: any, options?: { allowF
                 actorEmail: params.actorEmail,
                 tenantId: params.tenantId,
                 metadata: params.metadata || {},
-                timestamp: new Date()
+                createdAt: new Date()
             }
         });
     } catch (error) {
-        console.error('CRITICAL: Failed to write audit log', error, params);
+        console.error('CRITICAL: Failed to write audit outbox', error, params);
 
         // Fail-Closed by default.
         // We only allow proceeding if explicitly requested via options AND we are not in a transaction.

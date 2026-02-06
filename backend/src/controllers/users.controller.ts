@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/db';
-import bcrypt from 'bcryptjs';
+import { passwordService } from '../services/password.service';
 import { logAudit } from '../utils/audit';
 
 export const getUsers = async (req: Request, res: Response) => {
@@ -8,18 +8,37 @@ export const getUsers = async (req: Request, res: Response) => {
         const tenantId = req.user?.tenantId;
         if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
 
-        const users = await prisma.user.findMany({
-            where: { tenantId },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                avatar: true,
-                tenantId: true
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Safety Cap
+        const skip = (page - 1) * limit;
+
+        const [users, total] = await Promise.all([
+            prisma.user.findMany({
+                where: { tenantId },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    avatar: true,
+                    tenantId: true
+                },
+                skip,
+                take: limit,
+                orderBy: { name: 'asc' }
+            }),
+            prisma.user.count({ where: { tenantId } })
+        ]);
+
+        res.json({
+            data: users,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit)
             }
         });
-        res.json(users);
     } catch (error) {
         console.error('Get Users Error:', error);
         res.status(500).json({ error: 'Failed to fetch users' });
@@ -53,7 +72,7 @@ export const addUser = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'Invalid role' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await passwordService.hash(password);
 
         // Explicitly construct data object to prevent prototype pollution or extra field injection
         const newUser = await prisma.$transaction(async (tx) => {
