@@ -15,6 +15,9 @@ dotenv.config();
 
 const app = express();
 
+// Required for express-rate-limit on Render/Proxies
+app.set('trust proxy', 1);
+
 // F-001: Security Headers
 import helmet from 'helmet';
 app.use(helmet({
