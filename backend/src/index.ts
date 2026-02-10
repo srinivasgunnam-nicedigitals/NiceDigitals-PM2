@@ -54,7 +54,8 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const allowedOrigins = [
     FRONTEND_URL,
     'http://localhost:3000',
-    'http://localhost:5173'
+    'http://localhost:5173',
+    'https://nicedigitalspma.vercel.app'  // Production frontend
 ];
 
 import cookieParser from 'cookie-parser';
