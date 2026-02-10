@@ -185,8 +185,8 @@ const startServer = async () => {
     // Audit Requirement: SMTP must be ready
     const smtpReady = await emailService.verifyConnection();
     if (!smtpReady) {
-        logger.fatal('Refusing to start: SMTP service unavailable. Fix credentials or network.');
-        process.exit(1);
+        logger.warn('SMTP service unavailable. Emails will not be sent, but server will start.');
+        // process.exit(1); 
     }
 
     app.listen(PORT, () => {

@@ -21,6 +21,7 @@
         "@types/jsonwebtoken": "^9.0.10",
         "@types/pg": "^8.16.0",
         "@types/rate-limit-redis": "^1.7.4",
+        "axios": "^1.13.5",
         "bcryptjs": "^3.0.3",
         "cookie-parser": "^1.4.7",
         "cors": "^2.8.5",
