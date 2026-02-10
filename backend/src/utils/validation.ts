@@ -3,7 +3,7 @@ import { z } from 'zod';
 // Reusable parts
 const checklistItemSchema = z.object({
     id: z.string().max(50).optional(),
-    text: z.string().max(500),
+    label: z.string().max(500),
     completed: z.boolean()
 });
 
@@ -27,7 +27,9 @@ export const createProjectSchema = z.object({
     finalChecklist: z.array(checklistItemSchema).max(50).optional(),
 }).strict(); // Reject unknown fields
 
-export const updateProjectSchema = z.object({
+// === ADMIN AUTHORITY SCHEMA ===
+// Admins can update EVERYTHING including definition, assignments, and scope.
+export const adminUpdateProjectSchema = z.object({
     name: z.string().min(1).max(100).optional(),
     clientName: z.string().min(1).max(100).optional(),
     scope: z.string().max(5000).optional(),
@@ -44,22 +46,40 @@ export const updateProjectSchema = z.object({
     assignedDevManagerId: z.string().uuid().nullable().optional(),
     assignedQAId: z.string().uuid().nullable().optional(),
 
-    // Checklists
+    // Checklists - Admins can override these too
     designChecklist: z.array(checklistItemSchema).max(50).optional(),
     devChecklist: z.array(checklistItemSchema).max(50).optional(),
     qaChecklist: z.array(checklistItemSchema).max(50).optional(),
     finalChecklist: z.array(checklistItemSchema).max(50).optional(),
 
-    // Explicit signal for history generation (Frontend asks for 'action')
-    // We allow `newHistoryItem` structure to be passed, but VALIDATE it strictly
-    // Actually, controller logic seems to use `newHistoryItem` to trigger logic.
-    // Let's validate the SHAPE of what frontend sends, if we keep allowing it.
+    // History Trigger
     newHistoryItem: z.object({
         action: z.string().max(200),
-        rejectionSnapshot: z.array(z.any()).max(50).optional() // Weak validation on snapshot for now to match flexible JSON
+        rejectionSnapshot: z.array(z.any()).max(50).optional()
     }).optional()
+}).strict(); // REJECTS unknown fields
 
-}).strict();
+// === MEMBER AUTHORITY SCHEMA ===
+// Members (Designers, QA, Devs) can ONLY update checklists and working status.
+// THEY CANNOT CHANGE Scope, Priority, or Assignments.
+export const memberUpdateProjectSchema = z.object({
+    // NO core definition fields
+    // NO scope
+    // NO priority
+    // NO assignments
+
+    // Members can only update progress artifacts:
+    designChecklist: z.array(checklistItemSchema).max(50).optional(),
+    devChecklist: z.array(checklistItemSchema).max(50).optional(),
+    qaChecklist: z.array(checklistItemSchema).max(50).optional(),
+    finalChecklist: z.array(checklistItemSchema).max(50).optional(),
+
+    // Members can trigger specific history items related to their work
+    newHistoryItem: z.object({
+        action: z.string().max(200),
+        rejectionSnapshot: z.array(z.any()).max(50).optional()
+    }).optional()
+}).strict(); // REJECTS Any Admin field attempts
 
 export const addCommentSchema = z.object({
     text: z.string().min(1, "Comment text is required").max(2000)

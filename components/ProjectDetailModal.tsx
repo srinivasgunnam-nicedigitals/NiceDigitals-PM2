@@ -261,10 +261,10 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
   const getChecklistForStage = () => {
     switch (project.stage) {
-      case ProjectStage.DESIGN: return { items: project.designChecklist, key: 'designChecklist' };
-      case ProjectStage.DEVELOPMENT: return { items: project.devChecklist, key: 'devChecklist' };
-      case ProjectStage.QA: return { items: project.qaChecklist, key: 'qaChecklist' };
-      default: return { items: project.finalChecklist, key: 'finalChecklist' };
+      case ProjectStage.DESIGN: return { items: Array.isArray(project.designChecklist) ? project.designChecklist : [], key: 'designChecklist' };
+      case ProjectStage.DEVELOPMENT: return { items: Array.isArray(project.devChecklist) ? project.devChecklist : [], key: 'devChecklist' };
+      case ProjectStage.QA: return { items: Array.isArray(project.qaChecklist) ? project.qaChecklist : [], key: 'qaChecklist' };
+      default: return { items: Array.isArray(project.finalChecklist) ? project.finalChecklist : [], key: 'finalChecklist' };
     }
   };
 

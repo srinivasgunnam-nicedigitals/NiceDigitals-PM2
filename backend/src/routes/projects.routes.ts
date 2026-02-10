@@ -27,7 +27,7 @@ router.get('/:id', getProject);
 router.post('/', requireAdmin, createProject);
 
 // Updates: Logic in controller (Complex permissions)
-router.put('/:id', updateProject);
+router.patch('/:id', updateProject);
 
 // Deletes: ADMIN ONLY
 // Deletes: ADMIN ONLY

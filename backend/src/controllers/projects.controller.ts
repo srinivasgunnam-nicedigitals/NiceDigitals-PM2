@@ -1,16 +1,18 @@
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/db';
 import { ProjectStage } from '@prisma/client';
 
 import * as projectsService from '../services/projects.service';
-import { createProjectSchema, updateProjectSchema, addCommentSchema, advanceStageSchema, recordQAFeedbackSchema } from '../utils/validation';
+import { createProjectSchema, adminUpdateProjectSchema, memberUpdateProjectSchema, addCommentSchema, advanceStageSchema, recordQAFeedbackSchema } from '../utils/validation';
 import { logAudit } from '../utils/audit';
 
-export const getProjects = async (req: Request, res: Response) => {
+import { AppError } from '../utils/AppError';
+
+export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
         if (!tenantId) {
-            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+            throw AppError.unauthorized('Unauthorized: No tenant', 'NO_TENANT');
         }
 
         const page = parseInt(req.query.page as string) || 1;
@@ -78,18 +80,17 @@ export const getProjects = async (req: Request, res: Response) => {
             }
         });
     } catch (error) {
-        console.error('Error fetching projects:', error);
-        res.status(500).json({ error: 'Failed to fetch projects' });
+        next(error);
     }
 };
 
-export const getProject = async (req: Request, res: Response) => {
+export const getProject = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
         const { id } = req.params;
 
         if (!tenantId) {
-            return res.status(401).json({ error: 'Unauthorized' });
+            throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
         }
 
         const project = await prisma.project.findUnique({
@@ -127,23 +128,22 @@ export const getProject = async (req: Request, res: Response) => {
 
         res.json(safeProject);
     } catch (error) {
-        console.error('Error fetching project:', error);
-        res.status(500).json({ error: 'Failed to fetch project' });
+        next(error);
     }
 };
 
-export const createProject = async (req: Request, res: Response) => {
+export const createProject = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
         const userRole = req.user?.role;
         const userId = req.user?.id;
 
         if (!tenantId || !userId) {
-            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+            throw AppError.unauthorized('Unauthorized: No tenant', 'NO_TENANT');
         }
 
         if (userRole !== 'ADMIN') {
-            return res.status(403).json({ error: 'Forbidden: Only Admins can create projects' });
+            throw AppError.forbidden('Forbidden: Only Admins can create projects', 'ADMIN_REQUIRED');
         }
 
         const p = createProjectSchema.parse(req.body);
@@ -158,7 +158,7 @@ export const createProject = async (req: Request, res: Response) => {
                 }
             });
             if (count !== assignmentsToCheck.length) {
-                return res.status(400).json({ error: 'One or more assigned users do not belong to your organization' });
+                throw AppError.badRequest('One or more assigned users do not belong to your organization', 'CROSS_TENANT_ASSIGNMENT');
             }
         }
 
@@ -249,53 +249,41 @@ export const createProject = async (req: Request, res: Response) => {
 
         res.json(safeProject);
     } catch (error) {
-        console.error('Error creating project:', error);
-        res.status(500).json({ error: 'Failed to create project' });
+        next(error);
     }
 };
 
-export const updateProject = async (req: Request, res: Response) => {
+export const updateProject = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
         const userId = req.user?.id;
         const userRole = req.user?.role;
 
         if (!tenantId || !userId) {
-            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+            throw AppError.unauthorized('Unauthorized: No tenant', 'NO_TENANT');
         }
 
         const { id } = req.params;
-        const updates = updateProjectSchema.parse(req.body);
-        const { newHistoryItem, ...allowedUpdates } = updates;
 
         // 1. Fetch Project to verify Ownership / Assignment
         const existing = await prisma.project.findUnique({
             where: { id },
-            select: { id: true, tenantId: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, stage: true }
+            select: { id: true, tenantId: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, stage: true, name: true, assignedDesigner: true, assignedDevManager: true, assignedQA: true }
         });
 
         if (!existing || existing.tenantId !== tenantId) {
-            return res.status(404).json({ error: 'Project not found' });
+            throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
         }
 
-        // 2. Access Control Logic
-        const isAdmin = userRole === 'ADMIN';
-        const isAssigned =
-            existing.assignedDesignerId === userId ||
-            existing.assignedDevManagerId === userId ||
-            existing.assignedQAId === userId;
+        // ===================================
+        // PATH A: ADMIN AUTHORITY (Full Access)
+        // ===================================
+        if (userRole === 'ADMIN') {
+            // Strict Schema: Admin Schema
+            const updates = adminUpdateProjectSchema.parse(req.body);
+            const { newHistoryItem, ...allowedUpdates } = updates;
 
-        if (!isAdmin && !isAssigned) {
-            return res.status(403).json({ error: 'Forbidden: You are not assigned to this project' });
-        }
-
-        // 3. Assignment Mutation Guards
-        if (allowedUpdates.assignedDesignerId || allowedUpdates.assignedDevManagerId || allowedUpdates.assignedQAId) {
-            if (!isAdmin) {
-                return res.status(403).json({ error: 'Forbidden: Only Admins can reassign members' });
-            }
-
-            // CROSS-TENANT VALIDATION (CRITICAL FIXED)
+            // CROSS-TENANT VALIDATION (Admin Only feature)
             const assignmentsToCheck = [allowedUpdates.assignedDesignerId, allowedUpdates.assignedDevManagerId, allowedUpdates.assignedQAId].filter(id => id);
             if (assignmentsToCheck.length > 0) {
                 const count = await prisma.user.count({
@@ -308,38 +296,101 @@ export const updateProject = async (req: Request, res: Response) => {
                     return res.status(400).json({ error: 'One or more assigned users do not belong to your organization' });
                 }
             }
-        }
 
-        // B3: Validate Stage Transition
-        if (allowedUpdates.stage && allowedUpdates.stage !== existing.stage) {
-            const allowed = projectsService.VALID_TRANSITIONS[existing.stage] || [];
-            if (!allowed.includes(allowedUpdates.stage)) {
-                return res.status(400).json({
-                    error: `Invalid stage transition: Cannot move from ${existing.stage} to ${allowedUpdates.stage}`
-                });
+            // Stage Validation
+            if (allowedUpdates.stage && allowedUpdates.stage !== existing.stage) {
+                const allowed = projectsService.VALID_TRANSITIONS[existing.stage] || [];
+                if (!allowed.includes(allowedUpdates.stage)) {
+                    throw AppError.badRequest(`Invalid stage transition: Cannot move from ${existing.stage} to ${allowedUpdates.stage}`, 'INVALID_TRANSITION');
+                }
             }
+
+            // Admin History Generation
+            let historyCreate = undefined;
+            const changes: string[] = [];
+            if (allowedUpdates.assignedDesignerId && allowedUpdates.assignedDesignerId !== existing.assignedDesignerId) changes.push('Designer Assigned');
+            if (allowedUpdates.assignedDevManagerId && allowedUpdates.assignedDevManagerId !== existing.assignedDevManagerId) changes.push('Dev Manager Assigned');
+            if (allowedUpdates.assignedQAId && allowedUpdates.assignedQAId !== existing.assignedQAId) changes.push('QA Engineer Assigned');
+            if (allowedUpdates.scope && allowedUpdates.scope !== (existing as any).scope) changes.push('Scope Updated'); // cast if necessary or fetch scope
+
+            if (changes.length > 0 || newHistoryItem) {
+                historyCreate = {
+                    create: {
+                        stage: existing.stage,
+                        action: newHistoryItem?.action || changes.join(', ') || 'Project Updated',
+                        timestamp: new Date(),
+                        userId: userId,
+                        tenantId: tenantId,
+                        rejectionSnapshot: newHistoryItem?.rejectionSnapshot || undefined
+                    }
+                };
+            }
+
+            // Admin Update Transaction
+            const updatedProject = await prisma.$transaction(async (tx) => {
+                const up = await tx.project.update({
+                    where: { id },
+                    data: {
+                        ...allowedUpdates,
+                        history: historyCreate
+                    },
+                    include: {
+                        assignedDesigner: { select: { id: true, name: true, avatar: true, tenantId: true } },
+                        assignedDevManager: { select: { id: true, name: true, avatar: true, tenantId: true } },
+                        assignedQA: { select: { id: true, name: true, avatar: true, tenantId: true } }
+                    }
+                });
+
+                await logAudit({
+                    action: 'PROJECT_UPDATE_ADMIN',
+                    target: `Project: ${up.name}`,
+                    actorId: userId,
+                    actorEmail: req.user?.email,
+                    tenantId,
+                    metadata: { projectId: id }
+                }, tx);
+
+                return up;
+            });
+
+            return res.json(sanitizeProject(updatedProject, tenantId));
         }
 
-        // 4. Server-Side History Generation
-        let historyCreate = undefined;
-        const changes: string[] = [];
-        if (allowedUpdates.assignedDesignerId && allowedUpdates.assignedDesignerId !== existing.assignedDesignerId) changes.push('Designer Assigned');
-        if (allowedUpdates.assignedDevManagerId && allowedUpdates.assignedDevManagerId !== existing.assignedDevManagerId) changes.push('Dev Manager Assigned');
-        if (allowedUpdates.assignedQAId && allowedUpdates.assignedQAId !== existing.assignedQAId) changes.push('QA Engineer Assigned');
+        // ===================================
+        // PATH B: MEMBER AUTHORITY (Restricted)
+        // ===================================
 
-        if (changes.length > 0) {
+        // 1. Strict Assignment Check
+        const isAssigned =
+            existing.assignedDesignerId === userId ||
+            existing.assignedDevManagerId === userId ||
+            existing.assignedQAId === userId;
+
+        if (!isAssigned) {
+            throw AppError.forbidden('Forbidden: You are not assigned to this project', 'NOT_ASSIGNED');
+        }
+
+        // 2. Strict Schema: Member Schema
+        // This will THROW if frontend sends 'scope', 'name', 'priority', or 'assignments'
+        const updates = memberUpdateProjectSchema.parse(req.body);
+        const { newHistoryItem, ...allowedUpdates } = updates;
+
+        // 3. Member History (Usually Checklist updates)
+        let historyCreate = undefined;
+        if (newHistoryItem) {
             historyCreate = {
                 create: {
                     stage: existing.stage,
-                    action: changes.join(', '),
+                    action: newHistoryItem.action,
                     timestamp: new Date(),
                     userId: userId,
-                    tenantId: tenantId
+                    tenantId: tenantId,
+                    rejectionSnapshot: newHistoryItem.rejectionSnapshot || undefined
                 }
             };
         }
 
-        // TRANSACTIONAL MUTATION & AUDIT (CRITICAL FIXED)
+        // Member Update Transaction
         const updatedProject = await prisma.$transaction(async (tx) => {
             const up = await tx.project.update({
                 where: { id },
@@ -348,60 +399,55 @@ export const updateProject = async (req: Request, res: Response) => {
                     history: historyCreate
                 },
                 include: {
-                    assignedDesigner: {
-                        select: { id: true, name: true, avatar: true, tenantId: true }
-                    },
-                    assignedDevManager: {
-                        select: { id: true, name: true, avatar: true, tenantId: true }
-                    },
-                    assignedQA: {
-                        select: { id: true, name: true, avatar: true, tenantId: true }
-                    }
+                    assignedDesigner: { select: { id: true, name: true, avatar: true, tenantId: true } },
+                    assignedDevManager: { select: { id: true, name: true, avatar: true, tenantId: true } },
+                    assignedQA: { select: { id: true, name: true, avatar: true, tenantId: true } }
                 }
             });
 
             await logAudit({
-                action: 'PROJECT_UPDATE',
+                action: 'PROJECT_UPDATE_MEMBER',
                 target: `Project: ${up.name}`,
                 actorId: userId,
                 actorEmail: req.user?.email,
                 tenantId,
-                metadata: { projectId: id, updates: allowedUpdates }
-            }, tx); // Pass transaction
+                metadata: { projectId: id }
+            }, tx);
 
             return up;
         });
 
-        const safeProject = {
-            ...updatedProject,
-            assignedDesigner: updatedProject.assignedDesigner && updatedProject.assignedDesigner.tenantId === tenantId
-                ? { id: updatedProject.assignedDesigner.id, name: updatedProject.assignedDesigner.name, avatar: updatedProject.assignedDesigner.avatar }
-                : null,
-            assignedDevManager: updatedProject.assignedDevManager && updatedProject.assignedDevManager.tenantId === tenantId
-                ? { id: updatedProject.assignedDevManager.id, name: updatedProject.assignedDevManager.name, avatar: updatedProject.assignedDevManager.avatar }
-                : null,
-            assignedQA: updatedProject.assignedQA && updatedProject.assignedQA.tenantId === tenantId
-                ? { id: updatedProject.assignedQA.id, name: updatedProject.assignedQA.name, avatar: updatedProject.assignedQA.avatar }
-                : null
-        };
+        return res.json(sanitizeProject(updatedProject, tenantId));
 
-        res.json(safeProject);
     } catch (error) {
-        console.error('Error updating project:', error);
-        res.status(500).json({ error: 'Failed to update project' });
+        next(error);
     }
 };
 
-export const deleteProject = async (req: Request, res: Response) => {
+// Helper to reused sanitization logic
+const sanitizeProject = (project: any, tenantId: string) => ({
+    ...project,
+    assignedDesigner: project.assignedDesigner && project.assignedDesigner.tenantId === tenantId
+        ? { id: project.assignedDesigner.id, name: project.assignedDesigner.name, avatar: project.assignedDesigner.avatar }
+        : null,
+    assignedDevManager: project.assignedDevManager && project.assignedDevManager.tenantId === tenantId
+        ? { id: project.assignedDevManager.id, name: project.assignedDevManager.name, avatar: project.assignedDevManager.avatar }
+        : null,
+    assignedQA: project.assignedQA && project.assignedQA.tenantId === tenantId
+        ? { id: project.assignedQA.id, name: project.assignedQA.name, avatar: project.assignedQA.avatar }
+        : null
+});
+
+export const deleteProject = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
         const userRole = req.user?.role;
 
-        if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
+        if (!tenantId) throw AppError.unauthorized('Unauthorized: No tenant', 'NO_TENANT');
 
         // Double check Admin role
         if (userRole !== 'ADMIN') {
-            return res.status(403).json({ error: 'Forbidden: Only Admins can delete projects' });
+            throw AppError.forbidden('Forbidden: Only Admins can delete projects', 'ADMIN_REQUIRED');
         }
 
         const { id } = req.params;
@@ -435,23 +481,21 @@ export const deleteProject = async (req: Request, res: Response) => {
         res.json({ success: true });
     } catch (error: any) {
         if (error.message === 'Project not found') {
-            return res.status(404).json({ error: 'Project not found' });
+            throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
         }
-        console.error('Delete error:', error);
-        res.status(500).json({ error: 'Failed to delete project' });
+        next(error);
     }
 };
 
-export const addComment = async (req: Request, res: Response) => {
+export const addComment = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
         const { text } = addCommentSchema.parse(req.body);
         const userId = req.user?.id;
         const tenantId = req.user?.tenantId;
 
-        // Validation ensures userId is present (auth middleware)
         if (!userId || !tenantId) {
-            return res.status(401).json({ error: 'Unauthorized: No tenant' });
+            throw AppError.unauthorized('Unauthorized: No tenant', 'NO_TENANT');
         }
 
         // Verify project belongs to tenant
@@ -460,7 +504,7 @@ export const addComment = async (req: Request, res: Response) => {
         });
 
         if (!project) {
-            return res.status(404).json({ error: 'Project not found or access denied' });
+            throw AppError.notFound('Project not found or access denied', 'PROJECT_NOT_FOUND');
         }
 
         const newComment = await prisma.comment.create({
@@ -475,8 +519,7 @@ export const addComment = async (req: Request, res: Response) => {
 
         res.json(newComment);
     } catch (error) {
-        console.error('Add comment error:', error);
-        res.status(500).json({ error: 'Failed to add comment' });
+        next(error);
     }
 };
 
@@ -484,7 +527,7 @@ export const addComment = async (req: Request, res: Response) => {
  * NEW SECURE ENDPOINT: Advance project stage
  * Server calculates all scores - client cannot influence
  */
-export const advanceStage = async (req: Request, res: Response) => {
+export const advanceStage = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
         const { nextStage } = advanceStageSchema.parse(req.body);
@@ -492,7 +535,7 @@ export const advanceStage = async (req: Request, res: Response) => {
         const tenantId = req.user?.tenantId;
 
         if (!userId || !tenantId) {
-            return res.status(401).json({ error: 'Unauthorized' });
+            throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
         }
         // nextStage check handled by Zod
 
@@ -505,9 +548,8 @@ export const advanceStage = async (req: Request, res: Response) => {
         });
 
         res.json(updatedProject);
-    } catch (error: any) {
-        console.error('Advance stage error:', error);
-        res.status(500).json({ error: error.message || 'Failed to advance stage' });
+    } catch (error) {
+        next(error);
     }
 };
 
@@ -515,7 +557,7 @@ export const advanceStage = async (req: Request, res: Response) => {
  * NEW SECURE ENDPOINT: Record QA feedback
  * Server calculates penalties/bonuses - client cannot influence
  */
-export const recordQAFeedback = async (req: Request, res: Response) => {
+export const recordQAFeedback = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
         const { passed } = recordQAFeedbackSchema.parse(req.body);
@@ -523,7 +565,7 @@ export const recordQAFeedback = async (req: Request, res: Response) => {
         const tenantId = req.user?.tenantId;
 
         if (!userId || !tenantId) {
-            return res.status(401).json({ error: 'Unauthorized' });
+            throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
         }
         // passed check handled by Zod
 
@@ -536,13 +578,12 @@ export const recordQAFeedback = async (req: Request, res: Response) => {
         });
 
         res.json(updatedProject);
-    } catch (error: any) {
-        console.error('QA feedback error:', error);
-        res.status(500).json({ error: error.message || 'Failed to record QA feedback' });
+    } catch (error) {
+        next(error);
     }
 };
 
-export const getProjectHistory = async (req: Request, res: Response) => {
+export const getProjectHistory = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
         const { id } = req.params;
@@ -550,7 +591,7 @@ export const getProjectHistory = async (req: Request, res: Response) => {
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
         const skip = (page - 1) * limit;
 
-        if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!tenantId) throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
 
         const [history, total] = await Promise.all([
             prisma.historyItem.findMany({
@@ -567,12 +608,11 @@ export const getProjectHistory = async (req: Request, res: Response) => {
             meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
         });
     } catch (error) {
-        console.error('Error fetching history:', error);
-        res.status(500).json({ error: 'Failed to fetch history' });
+        next(error);
     }
 };
 
-export const getProjectComments = async (req: Request, res: Response) => {
+export const getProjectComments = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
         const { id } = req.params;
@@ -580,7 +620,7 @@ export const getProjectComments = async (req: Request, res: Response) => {
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
         const skip = (page - 1) * limit;
 
-        if (!tenantId) return res.status(401).json({ error: 'Unauthorized' });
+        if (!tenantId) throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
 
         const [comments, total] = await Promise.all([
             prisma.comment.findMany({
@@ -597,7 +637,6 @@ export const getProjectComments = async (req: Request, res: Response) => {
             meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
         });
     } catch (error) {
-        console.error('Error fetching comments:', error);
-        res.status(500).json({ error: 'Failed to fetch comments' });
+        next(error);
     }
 };

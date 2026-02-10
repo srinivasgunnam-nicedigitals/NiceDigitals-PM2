@@ -20,8 +20,23 @@ async function processOutbox() {
 
         console.log(`[AuditWorker] Processing ${items.length} items...`);
 
-        // 2. Transpose to AuditLog
-        const audits = items.map(item => ({
+        // 2. Validate Tenants
+        const tenantIds = Array.from(new Set(items.map(i => i.tenantId)));
+        const existingTenants = await prisma.tenant.findMany({
+            where: { id: { in: tenantIds } },
+            select: { id: true }
+        });
+        const validTenantIds = new Set(existingTenants.map(t => t.id));
+
+        const validItems = items.filter(item => validTenantIds.has(item.tenantId));
+        const invalidItems = items.filter(item => !validTenantIds.has(item.tenantId));
+
+        if (invalidItems.length > 0) {
+            console.warn(`[AuditWorker] Dropping ${invalidItems.length} items for missing tenants:`, invalidItems.map(i => i.tenantId));
+        }
+
+        // 3. Transpose Valid Items Only
+        const audits = validItems.map(item => ({
             action: item.action,
             target: item.target,
             actorId: item.actorId,
@@ -31,12 +46,15 @@ async function processOutbox() {
             timestamp: item.createdAt // Preserve original timestamp
         }));
 
-        // 3. Transaction: Write to AuditLog + Delete from Outbox
+        // 4. Transaction: Write Valid to AuditLog + Delete ALL from Outbox
         await prisma.$transaction(async (tx) => {
-            await tx.auditLog.createMany({
-                data: audits
-            });
+            if (audits.length > 0) {
+                await tx.auditLog.createMany({
+                    data: audits
+                });
+            }
 
+            // Always delete the batch from outbox so we don't get stuck in a loop
             await tx.auditOutbox.deleteMany({
                 where: {
                     id: { in: items.map(i => i.id) }

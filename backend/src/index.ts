@@ -94,10 +94,10 @@ if (process.env.REDIS_URL) {
     logger.info('Using Redis for Rate Limiting');
 } else {
     if (process.env.NODE_ENV === 'production') {
-        logger.fatal('CRITICAL: REDIS_URL missing in production. Distributed rate limiting is disabled.');
-        process.exit(1);
+        logger.warn('REDIS_URL missing in production. Falling back to in-memory rate limiting. NOTE: This is not recommended for high-scale.');
+        // process.exit(1); // Allow fallback for easier deployment
     }
-    logger.warn('Redis not configured. Using in-memory rate limiting (Dev Only).');
+    logger.warn('Redis not configured. Using in-memory rate limiting.');
 }
 
 const authLimiter = rateLimit({

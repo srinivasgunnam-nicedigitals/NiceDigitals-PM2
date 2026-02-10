@@ -124,8 +124,8 @@ export const backendApi = {
 
     // Users
     getUsers: async () => {
-        const response = await api.get<User[]>('/users');
-        return response.data;
+        const response = await api.get<{ data: User[], meta: any }>('/users');
+        return response.data.data;
     },
 
     addUser: async (user: User) => {

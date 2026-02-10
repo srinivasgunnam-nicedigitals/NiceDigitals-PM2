@@ -1,5 +1,6 @@
 import { prisma } from '../config/db';
 import { differenceInDays, parseISO } from 'date-fns';
+import { AppError } from '../utils/AppError';
 
 // Scoring rules - moved from frontend constants
 const SCORING_RULES = {
@@ -50,13 +51,13 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
     });
 
     if (!project) {
-        throw new Error('Project not found or access denied');
+        throw AppError.notFound('Project not found or access denied', 'PROJECT_NOT_FOUND');
     }
 
     // State Machine Validation
     const allowed = VALID_TRANSITIONS[project.stage] || [];
     if (!allowed.includes(nextStage)) {
-        throw new Error(`Invalid stage transition: Cannot move from ${project.stage} to ${nextStage}`);
+        throw AppError.badRequest(`Invalid stage transition: Cannot move from ${project.stage} to ${nextStage}`, 'INVALID_TRANSITION');
     }
 
     // Create history entry
@@ -170,15 +171,15 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
     });
 
     if (!project) {
-        throw new Error('Project not found or access denied');
+        throw AppError.notFound('Project not found or access denied', 'PROJECT_NOT_FOUND');
     }
 
     if (!project.assignedDevManagerId) {
-        throw new Error('Project has no assigned dev manager');
+        throw AppError.badRequest('Project has no assigned dev manager', 'NO_DEV_MANAGER');
     }
 
     if (project.stage !== 'QA') {
-        throw new Error('QA Feedback can only be recorded when project is in QA stage');
+        throw AppError.badRequest('QA Feedback can only be recorded when project is in QA stage', 'INVALID_STAGE_FOR_QA');
     }
 
     if (passed) {

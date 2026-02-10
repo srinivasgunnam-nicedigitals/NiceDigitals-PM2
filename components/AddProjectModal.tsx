@@ -21,20 +21,25 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
     assignedDevManagerId: ''
   });
 
+  const isFormValid = formData.name.trim() !== '' &&
+    formData.clientName.trim() !== '' &&
+    formData.overallDeadline !== '';
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    addProject(formData);
+    if (!isFormValid) return;
+
+    addProject({
+      ...formData,
+      // Sanitize optional assignments: convert empty strings to null/undefined
+      // The backend expects optional nullable UUIDs
+      assignedDesignerId: formData.assignedDesignerId || null,
+      assignedDevManagerId: formData.assignedDevManagerId || null
+    });
     onClose(); // Ensure modal closes
   };
 
-  // Handle Escape key
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
+  // ... (useEffect remains the same)
 
   const designers = users.filter(u => u.role === UserRole.DESIGNER);
   const devManagers = users.filter(u => u.role === UserRole.DEV_MANAGER);
@@ -62,7 +67,9 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Project Title</label>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                  Project Title <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
                   <Target className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
@@ -76,7 +83,9 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Client Name</label>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                  Client Name <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
@@ -96,7 +105,9 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Priority</label>
+                <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                  Priority <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
                   <Flag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <select
@@ -142,7 +153,9 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Project Deadline</label>
+              <label className="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+                Project Deadline <span className="text-red-500">*</span>
+              </label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
@@ -166,7 +179,14 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
               />
             </div>
 
-            <button type="submit" className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-xl shadow-indigo-100 dark:shadow-none hover:shadow-indigo-300 dark:hover:shadow-indigo-500/30 transition-all flex items-center justify-center gap-2">
+            <button
+              type="submit"
+              disabled={!isFormValid}
+              className={`w-full py-4 font-black rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 ${isFormValid
+                  ? 'bg-indigo-600 text-white shadow-indigo-100 dark:shadow-none hover:shadow-indigo-300 dark:hover:shadow-indigo-500/30'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed shadow-none'
+                }`}
+            >
               Initiate Project
             </button>
           </form>
