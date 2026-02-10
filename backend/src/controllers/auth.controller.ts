@@ -85,10 +85,11 @@ export const login = async (req: Request, res: Response) => {
         );
 
         // 5. Set Cookie
+        // AUDIT FIX: Use sameSite: 'none' and secure: true for cross-domain production (Vercel <-> Render)
         res.cookie('token', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production', // true in prod
-            sameSite: 'strict',
+            secure: process.env.NODE_ENV === 'production', // Must be true if sameSite is 'none'
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             maxAge: 24 * 60 * 60 * 1000 // 24 hours
         });
 
