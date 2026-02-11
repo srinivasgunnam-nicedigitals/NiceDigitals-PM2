@@ -1,7 +1,5 @@
 import { parentPort } from 'worker_threads';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../config/db';
 
 const BATCH_SIZE = 100;
 const POLL_INTERVAL_MS = 1000;

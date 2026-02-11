@@ -17,6 +17,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ onClose 
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [resetToken, setResetToken] = useState('');
+    const TOKEN_LENGTH = 64;
 
     const handleRequestReset = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -57,6 +58,12 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ onClose 
 
         if (newPassword !== confirmPassword) {
             setError('Passwords do not match');
+            setIsLoading(false);
+            return;
+        }
+
+        if (token.length !== TOKEN_LENGTH) {
+            setError('Reset code format is invalid');
             setIsLoading(false);
             return;
         }
@@ -164,7 +171,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ onClose 
                     ) : (
                         <form onSubmit={handleResetPassword} className="space-y-5">
                             <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
-                                Enter the 6-digit reset code and your new password.
+                                Enter the reset code from your email and your new password.
                             </p>
 
                             <div>
@@ -185,22 +192,22 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({ onClose 
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">
-                                    Reset Code
-                                </label>
-                                <div className="relative group">
-                                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                                    <input
-                                        type="text"
-                                        value={token}
-                                        onChange={(e) => setToken(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                        placeholder="000000"
-                                        required
-                                        maxLength={6}
-                                        className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-slate-900 dark:text-slate-100 transition-all text-center tracking-widest text-xl"
-                                    />
+                                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">
+                                        Reset Code
+                                    </label>
+                                    <div className="relative group">
+                                        <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                                        <input
+                                            type="text"
+                                            value={token}
+                                            onChange={(e) => setToken(e.target.value.trim().toLowerCase().replace(/[^a-f0-9]/g, '').slice(0, TOKEN_LENGTH))}
+                                            placeholder="Paste reset code"
+                                            required
+                                            maxLength={TOKEN_LENGTH}
+                                            className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-slate-900 dark:text-slate-100 transition-all tracking-wide text-sm"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
 
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">

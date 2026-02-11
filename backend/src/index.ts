@@ -121,13 +121,7 @@ const apiLimiter = rateLimit({
     store: limiterStore as any
 });
 
-app.use('/api/auth', authLimiter);
-app.use('/api', apiLimiter); // Applies to all other /api routes that aren't caught by specific middleware above if mounted later, but here we mount globally to /api base or specific routes.
-// Better strategy: Apply global relaxed, and specific strict.
-// app.use(apiLimiter); // Global baseline
-// app.use('/api/auth', authLimiter); // Specific override? No, rateLimit doesn't override, it stacks.
-
-// Correct approach: Apply limiters to the route usage lines.
+// Apply rate limiters at route mount points only to avoid accidental limiter stacking.
 
 app.use(express.json());
 

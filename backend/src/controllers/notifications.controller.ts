@@ -62,18 +62,39 @@ export const clearAll = async (req: Request, res: Response) => {
 
 // Internal usage mainly, but exposed if needed (e.g. from admin panel)
 export const createNotification = async (req: Request, res: Response) => {
-    // Only internal logic usually calls this, but for testing:
     try {
         const { title, message, type, userId } = req.body;
         const tenantId = req.user?.tenantId;
-        
+        const role = req.user?.role;
+
+        if (!tenantId || !role) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        if (role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Forbidden: Admins only' });
+        }
+
+        if (!title || !message || !type || !userId) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        const targetUser = await prisma.user.findFirst({
+            where: { id: userId, tenantId },
+            select: { id: true }
+        });
+
+        if (!targetUser) {
+            return res.status(400).json({ error: 'Target user is invalid for this tenant' });
+        }
+
         const notif = await prisma.notification.create({
             data: {
                 title,
                 message,
                 type,
-                userId,
-                tenantId: tenantId!
+                userId: targetUser.id,
+                tenantId
             }
         });
         res.json(notif);

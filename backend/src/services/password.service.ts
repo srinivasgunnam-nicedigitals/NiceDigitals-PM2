@@ -1,6 +1,7 @@
 import { Worker } from 'worker_threads';
 import path from 'path';
 import crypto from 'crypto';
+import fs from 'fs';
 
 interface WorkerMessage {
     id: string;
@@ -16,17 +17,12 @@ class PasswordService {
     constructor() {
         this.pending = new Map();
 
-        // In dev (ts-node), we need to handle .ts extension or register ts-node
-        // Ideally we use a .js file in production.
-        // For this clean-room implementation, we assume we can point to the worker file.
-        // Note: Running TS workers without pre-compilation is tricky.
-        // We will try to resolve the worker path dynamically.
+        const workerJsPath = path.join(__dirname, '../workers/password.worker.js');
+        const workerTsPath = path.join(__dirname, '../workers/password.worker.ts');
+        const workerPath = fs.existsSync(workerJsPath) ? workerJsPath : workerTsPath;
 
-        const workerPath = path.join(__dirname, '../workers/password.worker.ts');
-
-        // We use execArgv to register ts-node if we are in dev
         this.worker = new Worker(workerPath, {
-            execArgv: /\.ts$/.test(workerPath) ? ['-r', 'ts-node/register'] : undefined
+            execArgv: workerPath.endsWith('.ts') ? ['-r', 'ts-node/register'] : undefined
         });
 
         this.worker.on('message', (message: WorkerMessage) => {

@@ -1,20 +1,45 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# PMA Internal App
 
-# Run and deploy your AI Studio app
+Project Management Application with:
+- Frontend: React + Vite + TypeScript
+- Backend: Node.js + Express + Prisma + PostgreSQL
 
-This contains everything you need to run your app locally.
+## Prerequisites
 
-View your app in AI Studio: https://ai.studio/apps/drive/15TWX8DtqZHQLXAP-_guiICfPk3yG8oIs
+- Node.js 20+
+- PostgreSQL (or Supabase/Postgres-compatible DB)
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
+## Frontend Setup
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Create `.env` in repo root:
+   `VITE_API_URL=http://localhost:3001/api`
+3. Run frontend:
    `npm run dev`
+4. Build frontend:
+   `npm run build`
+
+## Backend Setup
+
+1. Install dependencies:
+   `cd backend && npm install`
+2. Create `backend/.env` from `backend/.env.example` and set:
+   `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`, and SMTP vars if password reset email is required.
+3. Generate Prisma client and run schema:
+   `npm run prisma:generate`
+   `npm run prisma:push`
+4. Start backend in dev:
+   `npm run dev`
+5. Build and run production backend:
+   `npm run build`
+   `npm start`
+
+## Validation Commands
+
+- Frontend type-check: `npm run type-check`
+- Frontend build: `npm run build`
+- Backend build: `cd backend && npm run build`
+- Security audit (prod deps):
+  `npm audit --omit=dev`
+  `cd backend && npm audit --omit=dev`

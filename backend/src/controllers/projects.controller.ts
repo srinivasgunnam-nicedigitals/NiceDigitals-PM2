@@ -8,6 +8,14 @@ import { logAudit } from '../utils/audit';
 
 import { AppError } from '../utils/AppError';
 
+const sanitizeScopeHtml = (html: string) => {
+    return html
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
+        .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+        .replace(/javascript:/gi, '');
+};
+
 export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
@@ -147,6 +155,7 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
         }
 
         const p = createProjectSchema.parse(req.body);
+        const sanitizedScope = sanitizeScopeHtml(p.scope ?? "");
 
         // CROSS-TENANT VALIDATION (CRITICAL FIXED)
         const assignmentsToCheck = [p.assignedDesignerId, p.assignedDevManagerId, p.assignedQAId].filter(id => id);
@@ -180,7 +189,7 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
                     // Do NOT trust p.id, generate UUID by default (Prisma)
                     name: p.name,
                     clientName: p.clientName,
-                    scope: p.scope ?? "",
+                    scope: sanitizedScope,
                     priority: p.priority,
                     stage: ProjectStage.UPCOMING, // Enforce start stage
                     overallDeadline: p.overallDeadline,
@@ -282,6 +291,12 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
             // Strict Schema: Admin Schema
             const updates = adminUpdateProjectSchema.parse(req.body);
             const { newHistoryItem, ...allowedUpdates } = updates;
+            const sanitizedUpdates = {
+                ...allowedUpdates,
+                ...(allowedUpdates.scope !== undefined
+                    ? { scope: sanitizeScopeHtml(allowedUpdates.scope) }
+                    : {})
+            };
 
             // CROSS-TENANT VALIDATION (Admin Only feature)
             const assignmentsToCheck = [allowedUpdates.assignedDesignerId, allowedUpdates.assignedDevManagerId, allowedUpdates.assignedQAId].filter(id => id);
@@ -298,20 +313,20 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
             }
 
             // Stage Validation
-            if (allowedUpdates.stage && allowedUpdates.stage !== existing.stage) {
+            if (sanitizedUpdates.stage && sanitizedUpdates.stage !== existing.stage) {
                 const allowed = projectsService.VALID_TRANSITIONS[existing.stage] || [];
-                if (!allowed.includes(allowedUpdates.stage)) {
-                    throw AppError.badRequest(`Invalid stage transition: Cannot move from ${existing.stage} to ${allowedUpdates.stage}`, 'INVALID_TRANSITION');
+                if (!allowed.includes(sanitizedUpdates.stage)) {
+                    throw AppError.badRequest(`Invalid stage transition: Cannot move from ${existing.stage} to ${sanitizedUpdates.stage}`, 'INVALID_TRANSITION');
                 }
             }
 
             // Admin History Generation
             let historyCreate = undefined;
             const changes: string[] = [];
-            if (allowedUpdates.assignedDesignerId && allowedUpdates.assignedDesignerId !== existing.assignedDesignerId) changes.push('Designer Assigned');
-            if (allowedUpdates.assignedDevManagerId && allowedUpdates.assignedDevManagerId !== existing.assignedDevManagerId) changes.push('Dev Manager Assigned');
-            if (allowedUpdates.assignedQAId && allowedUpdates.assignedQAId !== existing.assignedQAId) changes.push('QA Engineer Assigned');
-            if (allowedUpdates.scope && allowedUpdates.scope !== (existing as any).scope) changes.push('Scope Updated'); // cast if necessary or fetch scope
+            if (sanitizedUpdates.assignedDesignerId && sanitizedUpdates.assignedDesignerId !== existing.assignedDesignerId) changes.push('Designer Assigned');
+            if (sanitizedUpdates.assignedDevManagerId && sanitizedUpdates.assignedDevManagerId !== existing.assignedDevManagerId) changes.push('Dev Manager Assigned');
+            if (sanitizedUpdates.assignedQAId && sanitizedUpdates.assignedQAId !== existing.assignedQAId) changes.push('QA Engineer Assigned');
+            if (sanitizedUpdates.scope && sanitizedUpdates.scope !== (existing as any).scope) changes.push('Scope Updated'); // cast if necessary or fetch scope
 
             if (changes.length > 0 || newHistoryItem) {
                 historyCreate = {
@@ -331,7 +346,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                 const up = await tx.project.update({
                     where: { id },
                     data: {
-                        ...allowedUpdates,
+                        ...sanitizedUpdates,
                         history: historyCreate
                     },
                     include: {

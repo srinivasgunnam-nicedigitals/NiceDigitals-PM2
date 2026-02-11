@@ -21,6 +21,14 @@ interface ProjectDetailModalProps {
   onClose: () => void;
 }
 
+const sanitizeScopeHtml = (html: string): string => {
+  return html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
+    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
+    .replace(/javascript:/gi, '');
+};
+
 const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClose: () => void }) => {
   const { addComment, users, currentUser } = useApp();
   const [commentText, setCommentText] = useState('');
@@ -114,7 +122,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
   const { updateProject, advanceStage, recordQAFeedback, deleteProject, currentUser, users, archiveProject } = useApp();
   const { showConfirm, showPrompt } = useModal();
   const [activeTab, setActiveTab] = useState<'checklist' | 'details' | 'history'>('checklist');
-  const [editScope, setEditScope] = useState(project.scope);
+  const [editScope, setEditScope] = useState(sanitizeScopeHtml(project.scope));
   const [isSaving, setIsSaving] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
@@ -122,9 +130,10 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
   const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setEditScope(project.scope);
+    const sanitized = sanitizeScopeHtml(project.scope);
+    setEditScope(sanitized);
     if (editorRef.current) {
-      editorRef.current.innerHTML = project.scope;
+      editorRef.current.innerHTML = sanitized;
     }
   }, [project.scope]);
 
@@ -246,7 +255,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
   const handleSaveScope = () => {
     setIsSaving(true);
-    updateProject(project.id, { scope: editScope });
+    updateProject(project.id, { scope: sanitizeScopeHtml(editScope) });
     setTimeout(() => { setIsSaving(false); }, 1000);
   };
 
@@ -436,7 +445,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                     <div
                       ref={editorRef}
                       contentEditable
-                      onInput={(e) => setEditScope(e.currentTarget.innerHTML)}
+                      onInput={(e) => setEditScope(sanitizeScopeHtml(e.currentTarget.innerHTML))}
                       onClick={handleEditorClick}
                       onKeyUp={handleEditorKeyUp}
                       onPaste={handleEditorPaste}
