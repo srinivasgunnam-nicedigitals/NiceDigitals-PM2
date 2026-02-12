@@ -1,9 +1,19 @@
 import axios from 'axios';
 import { Project, User, ScoreEntry, Comment, HistoryItem } from '../types';
 
+const getBaseURL = () => {
+    const rawUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    // If it's a production URL (contains render.com) and doesn't end with /api, append it
+    if (rawUrl.includes('render.com') && !rawUrl.toLowerCase().endsWith('/api') && !rawUrl.toLowerCase().endsWith('/api/')) {
+        return rawUrl.replace(/\/$/, '') + '/api/';
+    }
+    // Otherwise just ensure it ends with a single slash
+    return rawUrl.replace(/\/$/, '') + '/';
+};
+
 // Create axios instance with base URL from environment variable
 const api = axios.create({
-    baseURL: (import.meta.env.VITE_API_URL || 'http://localhost:3001/api').replace(/\/$/, '') + '/',
+    baseURL: getBaseURL(),
     headers: {
         'Content-Type': 'application/json',
     },

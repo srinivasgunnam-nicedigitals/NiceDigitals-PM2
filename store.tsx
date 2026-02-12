@@ -58,12 +58,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const queryClient = useQueryClient();
   const { showAlert, showPrompt } = useModal();
 
+  // --- STATE ---
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
+    return saved ? JSON.parse(saved) : null;
+  });
+
   // --- QUERIES ---
   const { data: users = [], isLoading: usersLoading } = useQuery({
     queryKey: ['users'],
     queryFn: backendApi.getUsers,
     initialData: [],
-    refetchOnWindowFocus: true
+    refetchOnWindowFocus: true,
+    enabled: !!currentUser
   });
 
   // --- PAGINATION STATE ---
@@ -78,7 +85,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const { data: projectData, isLoading: projectsLoading } = useQuery({
     queryKey: ['projects', page],
     queryFn: () => backendApi.getProjects(page, 10), // Default 10 items per page
-    placeholderData: keepPreviousData
+    placeholderData: keepPreviousData,
+    enabled: !!currentUser
   });
 
   // Extract projects and update meta effect
@@ -94,12 +102,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const { data: scores = [] } = useQuery({
     queryKey: ['scores'],
     queryFn: backendApi.getScores,
-    initialData: [] as ScoreEntry[]
-  });
-
-  const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    return saved ? JSON.parse(saved) : null;
+    initialData: [] as ScoreEntry[],
+    enabled: !!currentUser
   });
 
 
@@ -455,7 +459,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     queryKey: ['notifications'],
     queryFn: backendApi.getNotifications,
     initialData: [],
-    refetchInterval: 30000 // Poll every 30s
+    refetchInterval: 30000, // Poll every 30s
+    enabled: !!currentUser
   });
 
   const markNotificationReadMutation = useMutation({
@@ -502,7 +507,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     queryFn: backendApi.getRankings,
     initialData: [],
     // Refetch often as scores change
-    refetchInterval: 60000
+    refetchInterval: 60000,
+    enabled: !!currentUser
   });
 
   const getDevRankings = useCallback(() => {
