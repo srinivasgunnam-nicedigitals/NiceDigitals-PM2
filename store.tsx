@@ -355,7 +355,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const recordQAFeedback = async (id: string, passed: boolean, userId: string) => {
     const project = projects.find(p => p.id === id);
-    if (!project || !project.assignedDevManagerId) return;
+    if (!project) return;
+    if (!project.assignedDevManagerId) {
+      showAlert({
+        title: 'Dev Lead Required',
+        message: 'Please assign a Dev Lead in the Brief tab before recording QA feedback. Rewards and penalties must be assigned to a team member.',
+        variant: 'warning'
+      });
+      return;
+    }
 
     try {
       // Call backend API which handles:
