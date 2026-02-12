@@ -21,7 +21,8 @@ interface ProjectDetailModalProps {
   onClose: () => void;
 }
 
-const sanitizeScopeHtml = (html: string): string => {
+const sanitizeScopeHtml = (html: string | undefined | null): string => {
+  if (!html || typeof html !== 'string') return '';
   return html
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
     .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')

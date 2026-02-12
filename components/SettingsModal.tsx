@@ -226,7 +226,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                     <div>
                                         <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-1.5">Role</label>
                                         <div className="px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-500 dark:text-slate-400">
-                                            {currentUser?.role.replace('_', ' ')}
+                                            {(currentUser?.role || '').replace('_', ' ')}
                                         </div>
                                     </div>
                                 </div>
