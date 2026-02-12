@@ -69,7 +69,7 @@ export const Layout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
-  
+
   const [showDailyReport, setShowDailyReport] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -230,7 +230,7 @@ export const Layout: React.FC = () => {
             <img src={currentUser?.avatar} className="w-8 h-8 rounded-lg ring-1 ring-slate-200 dark:ring-slate-700" alt="User" />
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate leading-none">{currentUser?.name}</p>
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 truncate">{currentUser?.role.replace('_', ' ')}</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 truncate">{(currentUser?.role || '').replace('_', ' ')}</p>
             </div>
             <Settings size={14} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
           </div>
@@ -331,7 +331,7 @@ export const Layout: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
           <div className="max-w-[1400px] mx-auto animate-saas-fade">
-             <Outlet context={{ onAddProject: () => setShowAddProjectModal(true) }} />
+            <Outlet context={{ onAddProject: () => setShowAddProjectModal(true) }} />
           </div>
         </div>
       </main>
