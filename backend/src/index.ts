@@ -10,6 +10,7 @@ import projectRoutes from './routes/projects.routes';
 import userRoutes from './routes/users.routes';
 import scoreRoutes from './routes/scores.routes';
 import bootstrapRoutes from './routes/bootstrap.routes';
+import { prisma } from './config/db';
 
 dotenv.config();
 
@@ -147,44 +148,55 @@ app.use((req, res, next) => {
     next();
 });
 
-// Health check
+// Health checks
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date() });
 });
 
-// Root route for convenience
+app.get('/api/health/db', async (req, res) => {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        res.json({
+            status: 'ok',
+            database: 'connected',
+            timestamp: new Date()
+        });
+    } catch (error) {
+        logger.error({ error }, 'Database health check failed');
+        res.status(503).json({
+            status: 'error',
+            database: 'disconnected',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+// Root route
 app.get('/', (req, res) => {
     res.json({ message: 'Nice Digital API is running 🚀', endpoints: '/api/*' });
 });
 
-// Mount Routes
+import rankingRoutes from './routes/ranking.routes';
+import notificationRoutes from './routes/notifications.routes';
+import { emailService } from './services/email.service';
+import './workers/audit.worker';
+
 // Mount Routes with Rate Limits
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/bootstrap', apiLimiter, bootstrapRoutes);
 app.use('/api/projects', apiLimiter, projectRoutes);
 app.use('/api/users', apiLimiter, userRoutes);
-import rankingRoutes from './routes/ranking.routes';
-import notificationRoutes from './routes/notifications.routes';
-
 app.use('/api/scores', apiLimiter, scoreRoutes);
 app.use('/api/rankings', apiLimiter, rankingRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
 
-// CRITICAL: Global error handler (must be last)
+// Global error handler
 app.use(errorHandler);
 
-import { emailService } from './services/email.service';
-
-// Start Background Workers
-import './workers/audit.worker';
-
-
 const startServer = async () => {
-    // Audit Requirement: SMTP must be ready
     const smtpReady = await emailService.verifyConnection();
     if (!smtpReady) {
         logger.warn('SMTP service unavailable. Emails will not be sent, but server will start.');
-        // process.exit(1); 
     }
 
     app.listen(PORT, () => {
