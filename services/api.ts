@@ -31,7 +31,7 @@ api.interceptors.request.use(
     }
 );
 
-// Add a response interceptor to handle 401 (Unauthorized)
+// Add a response interceptor to handle 401 (Unauthorized) and 409 (Conflict)
 api.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -46,6 +46,23 @@ api.interceptors.response.use(
                 window.location.href = '/login';
             }
         }
+
+        // VERSION CONFLICT DETECTION (409)
+        if (error.response && error.response.status === 409) {
+            const errorData = error.response.data;
+            if (errorData?.errorCode === 'VERSION_CONFLICT') {
+                // Dispatch custom event for conflict modal
+                window.dispatchEvent(new CustomEvent('version-conflict', {
+                    detail: {
+                        currentVersion: errorData.currentVersion,
+                        expectedVersion: errorData.expectedVersion,
+                        updatedAt: errorData.updatedAt,
+                        message: errorData.error || 'Project modified by another user'
+                    }
+                }));
+            }
+        }
+
         return Promise.reject(error);
     }
 );
@@ -95,7 +112,32 @@ export const backendApi = {
     },
 
     updateProject: async (id: string, updates: Partial<Project> & { newHistoryItem?: any }) => {
+        // VERSION ENFORCEMENT: Prevent accidental omission
+        if (!('version' in updates)) {
+            throw new Error('VERSION_REQUIRED: version field is mandatory for project updates');
+        }
         const response = await api.patch<Project>(`projects/${id}`, updates);
+        return response.data;
+    },
+
+    // Batch operations
+    batchUpdateProjects: async (request: {
+        operation: 'UPDATE_STAGE' | 'ASSIGN_USER' | 'ARCHIVE' | 'DELETE';
+        projectIds: string[];
+        payload: Record<string, any>;
+    }) => {
+        const response = await api.post<{
+            success: boolean;
+            totalRequested: number;
+            totalSucceeded: number;
+            totalFailed: number;
+            results: Array<{
+                projectId: string;
+                success: boolean;
+                error?: string;
+                errorCode?: string;
+            }>;
+        }>('projects/batch', request);
         return response.data;
     },
 
@@ -122,13 +164,21 @@ export const backendApi = {
 
     // NEW SECURE ENDPOINTS: Stage advancement and QA feedback
     // These replace the old client-side scoring logic
-    advanceProjectStage: async (projectId: string, nextStage: string) => {
-        const response = await api.post<Project>(`projects/${projectId}/advance-stage`, { nextStage });
+    advanceProjectStage: async (projectId: string, nextStage: string, version: number) => {
+        // VERSION ENFORCEMENT: Prevent accidental omission
+        if (version === undefined || version === null) {
+            throw new Error('VERSION_REQUIRED: version is mandatory for stage advancement');
+        }
+        const response = await api.post<Project>(`projects/${projectId}/advance-stage`, { nextStage, version });
         return response.data;
     },
 
-    recordQAFeedback: async (projectId: string, passed: boolean) => {
-        const response = await api.post<Project>(`projects/${projectId}/qa-feedback`, { passed });
+    recordQAFeedback: async (projectId: string, passed: boolean, version: number) => {
+        // VERSION ENFORCEMENT: Prevent accidental omission
+        if (version === undefined || version === null) {
+            throw new Error('VERSION_REQUIRED: version is mandatory for QA feedback');
+        }
+        const response = await api.post<Project>(`projects/${projectId}/qa-feedback`, { passed, version });
         return response.data;
     },
 

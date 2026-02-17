@@ -7,6 +7,7 @@ import { INITIAL_CHECKLISTS } from './constants';
 import { isSameMonth } from 'date-fns';
 import type { Notification } from './components/NotificationPanel';
 import { useModal } from './hooks/useModal';
+import { ConflictModal } from './components/ConflictModal';
 
 interface AppContextType {
   currentUser: User | null;
@@ -64,6 +65,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : null;
   });
 
+  // VERSION CONFLICT STATE
+  const [conflictState, setConflictState] = useState<{
+    isOpen: boolean;
+    details?: {
+      currentVersion?: number;
+      expectedVersion?: number;
+      updatedAt?: string;
+      message?: string;
+    };
+  }>({ isOpen: false });
+
   // --- QUERIES ---
   const { data: users = [], isLoading: usersLoading } = useQuery({
     queryKey: ['users'],
@@ -98,6 +110,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPaginationMeta(projectData.meta);
     }
   }, [projectData?.meta]);
+
+  // VERSION CONFLICT EVENT LISTENER
+  useEffect(() => {
+    const handleVersionConflict = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const details = customEvent.detail;
+
+      // Show conflict modal
+      setConflictState({
+        isOpen: true,
+        details: {
+          currentVersion: details.currentVersion,
+          expectedVersion: details.expectedVersion,
+          updatedAt: details.updatedAt,
+          message: details.message
+        }
+      });
+
+      // OPTIMISTIC ROLLBACK: Invalidate all project queries
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['project'] });
+    };
+
+    window.addEventListener('version-conflict', handleVersionConflict);
+    return () => window.removeEventListener('version-conflict', handleVersionConflict);
+  }, [queryClient]);
 
   const { data: scores = [] } = useQuery({
     queryKey: ['scores'],
@@ -261,6 +299,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const project = projects.find(p => p.id === id);
     if (!project) return;
 
+    // VERSION ENFORCEMENT: Extract version from current project state
+    if (project.version === undefined) {
+      showAlert({
+        title: 'Update Failed',
+        message: 'Project version missing. Please refresh the page.',
+        variant: 'error'
+      });
+      return;
+    }
+
     // Permission check for assignments
     if (updates.assignedDesignerId || updates.assignedDevManagerId || updates.assignedQAId) {
       if (currentUser?.role !== UserRole.ADMIN) {
@@ -275,7 +323,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     updateProjectMutation.mutate({
       id,
-      updates
+      updates: {
+        ...updates,
+        version: project.version // VERSION ENFORCEMENT: Include version in payload
+      }
     });
   };
 
@@ -307,6 +358,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const unarchiveProject = (id: string) => {
     if (!currentUser || currentUser.role !== UserRole.ADMIN) return;
+
+    const project = projects.find(p => p.id === id);
+    if (!project) return;
+
+    // VERSION ENFORCEMENT: Extract version from current project state
+    if (project.version === undefined) {
+      showAlert({
+        title: 'Archive Failed',
+        message: 'Project version missing. Please refresh the page.',
+        variant: 'error'
+      });
+      return;
+    }
+
     // Restore to ADMIN_REVIEW stage and clear completedAt
     const historyItem = {
       stage: ProjectStage.ADMIN_REVIEW,
@@ -320,7 +385,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updates: {
         stage: ProjectStage.ADMIN_REVIEW,
         completedAt: null,
-        newHistoryItem: historyItem
+        newHistoryItem: historyItem,
+        version: project.version // VERSION ENFORCEMENT: Include version in payload
       }
     });
   };
@@ -360,6 +426,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const recordQAFeedback = async (id: string, passed: boolean, userId: string) => {
     const project = projects.find(p => p.id === id);
     if (!project) return;
+
+    // VERSION ENFORCEMENT: Extract version from current project state
+    if (project.version === undefined) {
+      showAlert({
+        title: 'QA Feedback Failed',
+        message: 'Project version missing. Please refresh the page.',
+        variant: 'error'
+      });
+      return;
+    }
+
     if (!project.assignedDevManagerId) {
       showAlert({
         title: 'Dev Lead Required',
@@ -370,13 +447,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // Call backend API which handles:
-      // - Stage advancement (ADMIN_REVIEW on pass, DEVELOPMENT on fail)
-      // - QA fail count increment
-      // - Checklist resets
-      // - History entries
-      // - Score creation (server-side)
-      await backendApi.recordQAFeedback(id, passed);
+      // Call backend API with version
+      await backendApi.recordQAFeedback(id, passed, project.version);
 
       // Invalidate queries to refresh UI
       queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -397,13 +469,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const advanceStage = async (id: string, nextStage: ProjectStage, userId: string) => {
+    const project = projects.find(p => p.id === id);
+    if (!project) return;
+
+    // VERSION ENFORCEMENT: Extract version from current project state
+    if (project.version === undefined) {
+      showAlert({
+        title: 'Stage Advancement Failed',
+        message: 'Project version missing. Please refresh the page.',
+        variant: 'error'
+      });
+      return;
+    }
+
     try {
-      // Call backend API which handles:
-      // - Stage transitions
-      // - Permission checks
-      // - History entries
-      // - Server-side scoring (points, bonuses, penalties)
-      await backendApi.advanceProjectStage(id, nextStage);
+      // Call backend API with version
+      await backendApi.advanceProjectStage(id, nextStage, project.version);
 
       // Invalidate queries to refresh UI
       queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -436,35 +517,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(currentUser));
   }, [currentUser]);
 
-  // Bulk operations (Adapting to mutations)
-  const bulkUpdateStage = useCallback((projectIds: string[], stage: ProjectStage) => {
-    // Ideally we have a bulk API, but for now loop
-    projectIds.forEach(id => {
-      // We can re-use updateProject or call mutation directly
-      // Simple stage update
-      updateProjectMutation.mutate({ id, updates: { stage } });
-    });
-  }, [updateProjectMutation]);
+  // Bulk operations using batch API (NO forEach loops)
+  const bulkUpdateStage = useCallback(async (projectIds: string[], stage: ProjectStage) => {
+    try {
+      const result = await backendApi.batchUpdateProjects({
+        operation: 'UPDATE_STAGE',
+        projectIds,
+        payload: { stage }
+      });
 
-  const bulkAssignUser = useCallback((projectIds: string[], userId: string, role: 'designer' | 'dev' | 'qa') => {
-    projectIds.forEach(id => {
-      const updates: any = {};
-      if (role === 'designer') updates.assignedDesignerId = userId;
-      else if (role === 'dev') updates.assignedDevManagerId = userId;
-      else updates.assignedQAId = userId;
+      // Refetch to get updated data
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
 
-      updateProject(id, updates); // Use wrapper to handle history
-    });
-  }, [updateProject]); // Depend on wrapper
+      // Show deterministic result
+      if (result.totalFailed > 0) {
+        const failedIds = result.results.filter(r => !r.success).map(r => r.projectId);
+        alert(`Batch Update: ${result.totalSucceeded} succeeded, ${result.totalFailed} failed.\nFailed IDs: ${failedIds.join(', ')}`);
+      } else {
+        alert(`Successfully updated ${result.totalSucceeded} project(s) to ${stage}`);
+      }
+    } catch (error: any) {
+      alert(`Batch update failed: ${error.response?.data?.error || error.message}`);
+    }
+  }, [queryClient]);
 
-  const bulkArchiveProjects = useCallback((projectIds: string[]) => {
-    if (!currentUser) return;
-    projectIds.forEach(id => advanceStage(id, ProjectStage.COMPLETED, currentUser.id));
-  }, [currentUser, advanceStage]); // Depend on wrapper
+  const bulkAssignUser = useCallback(async (projectIds: string[], userId: string, role: 'designer' | 'dev' | 'qa') => {
+    try {
+      const result = await backendApi.batchUpdateProjects({
+        operation: 'ASSIGN_USER',
+        projectIds,
+        payload: { userId, role }
+      });
 
-  const bulkDeleteProjects = useCallback((projectIds: string[]) => {
-    projectIds.forEach(id => deleteProjectMutation.mutate(id));
-  }, [deleteProjectMutation]);
+      // Refetch to get updated data
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+
+      // Show deterministic result
+      if (result.totalFailed > 0) {
+        const failedIds = result.results.filter(r => !r.success).map(r => r.projectId);
+        alert(`Batch Assign: ${result.totalSucceeded} succeeded, ${result.totalFailed} failed.\nFailed IDs: ${failedIds.join(', ')}`);
+      } else {
+        alert(`Successfully assigned ${result.totalSucceeded} project(s)`);
+      }
+    } catch (error: any) {
+      alert(`Batch assign failed: ${error.response?.data?.error || error.message}`);
+    }
+  }, [queryClient]);
+
+  const bulkArchiveProjects = useCallback(async (projectIds: string[]) => {
+    try {
+      const result = await backendApi.batchUpdateProjects({
+        operation: 'ARCHIVE',
+        projectIds,
+        payload: {}
+      });
+
+      // Refetch to get updated data
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+
+      // Show deterministic result
+      if (result.totalFailed > 0) {
+        const failedIds = result.results.filter(r => !r.success).map(r => r.projectId);
+        alert(`Batch Archive: ${result.totalSucceeded} succeeded, ${result.totalFailed} failed.\nFailed IDs: ${failedIds.join(', ')}`);
+      } else {
+        alert(`Successfully archived ${result.totalSucceeded} project(s)`);
+      }
+    } catch (error: any) {
+      alert(`Batch archive failed: ${error.response?.data?.error || error.message}`);
+    }
+  }, [queryClient]);
+
+  const bulkDeleteProjects = useCallback(async (projectIds: string[]) => {
+    try {
+      const result = await backendApi.batchUpdateProjects({
+        operation: 'DELETE',
+        projectIds,
+        payload: {}
+      });
+
+      // Refetch to get updated data
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+
+      // Show deterministic result (DELETE is atomic, so all-or-nothing)
+      if (result.success) {
+        alert(`Successfully deleted ${result.totalSucceeded} project(s)`);
+      } else {
+        alert(`Batch delete failed: ${result.results[0]?.error || 'Unknown error'}`);
+      }
+    } catch (error: any) {
+      alert(`Batch delete failed: ${error.response?.data?.error || error.message}`);
+    }
+  }, [queryClient]);
 
   // Notifications Query
   const { data: notifications = [], refetch: refetchNotifications } = useQuery({
@@ -528,15 +671,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [rankings]);
 
   return (
-    <AppContext.Provider value={{
-      currentUser, users, projects, scores, clients, isLoading, setCurrentUser,
-      addProject, updateProject, addUser, updateUser, deleteUser, addComment, archiveProject, unarchiveProject, advanceStage, recordQAFeedback, regressToDev, getDevRankings,
-      bulkUpdateStage, bulkAssignUser, bulkArchiveProjects, bulkDeleteProjects, deleteProject,
-      notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications,
-      page, setPage, paginationMeta
-    }}>
-      {children}
-    </AppContext.Provider>
+    <>
+      <AppContext.Provider value={{
+        currentUser, users, projects, scores, clients, isLoading, setCurrentUser,
+        addProject, updateProject, addUser, updateUser, deleteUser, addComment, archiveProject, unarchiveProject, advanceStage, recordQAFeedback, regressToDev, getDevRankings,
+        bulkUpdateStage, bulkAssignUser, bulkArchiveProjects, bulkDeleteProjects, deleteProject,
+        notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications,
+        page, setPage, paginationMeta
+      }}>
+        {children}
+      </AppContext.Provider>
+
+      {/* VERSION CONFLICT MODAL */}
+      <ConflictModal
+        isOpen={conflictState.isOpen}
+        conflictDetails={conflictState.details}
+        onReload={() => {
+          // Invalidate all project queries to force refetch
+          queryClient.invalidateQueries({ queryKey: ['projects'] });
+          queryClient.invalidateQueries({ queryKey: ['project'] });
+          // Close modal
+          setConflictState({ isOpen: false });
+        }}
+      />
+    </>
   );
 };
 

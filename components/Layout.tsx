@@ -10,7 +10,6 @@ import {
   Trophy,
   LogOut,
   ChevronRight,
-  Bell,
   Search,
   Archive,
   ClipboardList,
@@ -36,7 +35,6 @@ import { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
 import { CommandPalette } from './CommandPalette';
 import { AddProjectModal } from './AddProjectModal';
 import { SettingsModal } from './SettingsModal';
-import { NotificationPanel } from './NotificationPanel';
 import { Button } from './ui';
 
 interface SidebarItemProps {
@@ -74,11 +72,9 @@ export const Layout: React.FC = () => {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
-  const { notifications, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications } = useApp();
   const [selectedProject, setSelectedProject] = useState<any>(null);
 
   // Auto-show daily briefing on first login
@@ -314,17 +310,6 @@ export const Layout: React.FC = () => {
               >
                 <HelpCircle size={19} />
               </button>
-              <button
-                onClick={() => setShowNotifications(true)}
-                className="p-2.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all relative"
-                aria-label="Notifications"
-                title="Notifications"
-              >
-                <Bell size={19} />
-                {notifications.some(n => !n.read) && (
-                  <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-indigo-600 rounded-full ring-2 ring-white dark:ring-slate-900"></span>
-                )}
-              </button>
             </div>
           </div>
         </header>
@@ -336,15 +321,6 @@ export const Layout: React.FC = () => {
         </div>
       </main>
 
-      {showNotifications && (
-        <NotificationPanel
-          notifications={notifications}
-          onClose={() => setShowNotifications(false)}
-          onMarkAsRead={markNotificationAsRead}
-          onMarkAllAsRead={markAllNotificationsAsRead}
-          onClearAll={clearAllNotifications}
-        />
-      )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showAddProjectModal && <AddProjectModal onClose={() => setShowAddProjectModal(false)} />}
       {showDailyReport && <DailyReportModal onClose={() => setShowDailyReport(false)} />}

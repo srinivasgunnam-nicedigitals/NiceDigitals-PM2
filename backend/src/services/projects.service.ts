@@ -28,6 +28,7 @@ interface AdvanceStageParams {
     nextStage: string;
     userId: string;
     tenantId: string;
+    version: number; // Required for optimistic locking
 }
 
 interface QAFeedbackParams {
@@ -35,6 +36,7 @@ interface QAFeedbackParams {
     passed: boolean;
     userId: string;
     tenantId: string;
+    version: number; // Required for optimistic locking
 }
 
 /**
@@ -43,15 +45,25 @@ interface QAFeedbackParams {
  * Frontend should NEVER calculate scores or stage transitions
  */
 export async function advanceProjectStage(params: AdvanceStageParams) {
-    const { projectId, nextStage, userId, tenantId } = params;
+    const { projectId, nextStage, userId, tenantId, version } = params;
 
     // Verify project exists and belongs to tenant
     const project = await prisma.project.findFirst({
-        where: { id: projectId, tenantId }
+        where: { id: projectId, tenantId },
+        select: { id: true, stage: true, version: true, assignedDevManagerId: true, overallDeadline: true, qaFailCount: true, tenantId: true }
     });
 
     if (!project) {
         throw AppError.notFound('Project not found or access denied', 'PROJECT_NOT_FOUND');
+    }
+
+    // VERSION ENFORCEMENT: Check for conflicts
+    if (project.version !== version) {
+        throw AppError.conflict(
+            'Project modified by another user',
+            'VERSION_CONFLICT',
+            { currentVersion: project.version, expectedVersion: version }
+        );
     }
 
     // State Machine Validation
@@ -117,13 +129,33 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
 
     // Transaction: Update project + create history + create scores atomically
     const result = await prisma.$transaction(async (tx) => {
-        // Update project
-        const updatedProject = await tx.project.update({
+        // Update project with version increment (atomic)
+        await tx.$executeRaw`
+            UPDATE "Project" 
+            SET stage = ${nextStage}::"ProjectStage", 
+                "completedAt" = ${completedAt || null}::timestamp,
+                version = version + 1,
+                "updatedAt" = NOW()
+            WHERE id = ${projectId}::uuid AND version = ${version}
+        `;
+
+        // Verify update succeeded (version matched)
+        const updated = await tx.project.findUnique({
             where: { id: projectId },
-            data: {
-                stage: nextStage as any,
-                completedAt: completedAt || undefined,
-            },
+            select: { version: true }
+        });
+
+        if (!updated || updated.version !== version + 1) {
+            throw AppError.conflict(
+                'Project modified by another user during update',
+                'VERSION_CONFLICT',
+                { currentVersion: updated?.version, expectedVersion: version }
+            );
+        }
+
+        // Fetch full updated project
+        const updatedProject = await tx.project.findUnique({
+            where: { id: projectId },
             include: {
                 assignedDesigner: true,
                 assignedDevManager: true,
@@ -163,15 +195,25 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
  * Server calculates all scoring implications
  */
 export async function recordQAFeedback(params: QAFeedbackParams) {
-    const { projectId, passed, userId, tenantId } = params;
+    const { projectId, passed, userId, tenantId, version } = params;
 
     // Verify project exists and belongs to tenant
     const project = await prisma.project.findFirst({
-        where: { id: projectId, tenantId }
+        where: { id: projectId, tenantId },
+        select: { id: true, stage: true, version: true, assignedDevManagerId: true, qaFailCount: true, qaChecklist: true, tenantId: true }
     });
 
     if (!project) {
         throw AppError.notFound('Project not found or access denied', 'PROJECT_NOT_FOUND');
+    }
+
+    // VERSION ENFORCEMENT: Check for conflicts
+    if (project.version !== version) {
+        throw AppError.conflict(
+            'Project modified by another user',
+            'VERSION_CONFLICT',
+            { currentVersion: project.version, expectedVersion: version }
+        );
     }
 
     if (!project.assignedDevManagerId) {
@@ -200,11 +242,32 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
 
         // Transaction: Advance stage + create scores
         const result = await prisma.$transaction(async (tx) => {
-            const updatedProject = await tx.project.update({
+            // Update project with version increment (atomic)
+            await tx.$executeRaw`
+                UPDATE "Project" 
+                SET stage = 'ADMIN_REVIEW'::"ProjectStage",
+                    version = version + 1,
+                    "updatedAt" = NOW()
+                WHERE id = ${projectId}::uuid AND version = ${version}
+            `;
+
+            // Verify update succeeded (version matched)
+            const updated = await tx.project.findUnique({
                 where: { id: projectId },
-                data: {
-                    stage: 'ADMIN_REVIEW'
-                },
+                select: { version: true }
+            });
+
+            if (!updated || updated.version !== version + 1) {
+                throw AppError.conflict(
+                    'Project modified by another user during update',
+                    'VERSION_CONFLICT',
+                    { currentVersion: updated?.version, expectedVersion: version }
+                );
+            }
+
+            // Fetch full updated project
+            const updatedProject = await tx.project.findUnique({
+                where: { id: projectId },
                 include: {
                     assignedDesigner: true,
                     assignedDevManager: true,
@@ -245,13 +308,34 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
             : [];
 
         const result = await prisma.$transaction(async (tx) => {
-            const updatedProject = await tx.project.update({
+            // Update project with version increment (atomic)
+            await tx.$executeRaw`
+                UPDATE "Project" 
+                SET stage = 'DEVELOPMENT'::"ProjectStage",
+                    "qaFailCount" = ${(project.qaFailCount || 0) + 1},
+                    "qaChecklist" = ${JSON.stringify(resetQA)}::jsonb,
+                    version = version + 1,
+                    "updatedAt" = NOW()
+                WHERE id = ${projectId}::uuid AND version = ${version}
+            `;
+
+            // Verify update succeeded (version matched)
+            const updated = await tx.project.findUnique({
                 where: { id: projectId },
-                data: {
-                    stage: 'DEVELOPMENT' as any,
-                    qaFailCount: (project.qaFailCount || 0) + 1,
-                    qaChecklist: resetQA as any
-                },
+                select: { version: true }
+            });
+
+            if (!updated || updated.version !== version + 1) {
+                throw AppError.conflict(
+                    'Project modified by another user during update',
+                    'VERSION_CONFLICT',
+                    { currentVersion: updated?.version, expectedVersion: version }
+                );
+            }
+
+            // Fetch full updated project
+            const updatedProject = await tx.project.findUnique({
+                where: { id: projectId },
                 include: {
                     assignedDesigner: true,
                     assignedDevManager: true,

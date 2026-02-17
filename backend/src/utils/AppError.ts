@@ -32,7 +32,7 @@ export class AppError extends Error {
         return new AppError(message, 404, code);
     }
 
-    static conflict(message: string, code: string = 'CONFLICT') {
-        return new AppError(message, 409, code);
+    static conflict(message: string, code: string = 'CONFLICT', details?: any) {
+        return new AppError(message, 409, code, details);
     }
 }

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/db';
-import { ProjectStage } from '@prisma/client';
+import { ProjectStage, Prisma } from '@prisma/client';
+
 
 import * as projectsService from '../services/projects.service';
 import { createProjectSchema, adminUpdateProjectSchema, memberUpdateProjectSchema, addCommentSchema, advanceStageSchema, recordQAFeedbackSchema } from '../utils/validation';
@@ -277,11 +278,24 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
         // 1. Fetch Project to verify Ownership / Assignment
         const existing = await prisma.project.findUnique({
             where: { id },
-            select: { id: true, tenantId: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, stage: true, name: true, assignedDesigner: true, assignedDevManager: true, assignedQA: true }
+            select: { id: true, tenantId: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, stage: true, name: true, version: true, assignedDesigner: true, assignedDevManager: true, assignedQA: true }
         });
 
         if (!existing || existing.tenantId !== tenantId) {
             throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
+        }
+
+        // VERSION-BASED CONFLICT DETECTION (Optimistic Locking)
+        // Version is now MANDATORY via Zod schema
+        const { version: expectedVersion } = req.body;
+
+        if (existing.version !== expectedVersion) {
+            return res.status(409).json({
+                error: 'Conflict: Project modified by another user',
+                errorCode: 'VERSION_CONFLICT',
+                currentVersion: existing.version,
+                expectedVersion: expectedVersion
+            });
         }
 
         // ===================================
@@ -335,26 +349,74 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                         action: newHistoryItem?.action || changes.join(', ') || 'Project Updated',
                         timestamp: new Date(),
                         userId: userId,
+                        projectId: id,
                         tenantId: tenantId,
                         rejectionSnapshot: newHistoryItem?.rejectionSnapshot || undefined
                     }
                 };
             }
 
-            // Admin Update Transaction
+            // Admin Update Transaction with Atomic Version Increment
             const updatedProject = await prisma.$transaction(async (tx) => {
-                const up = await tx.project.update({
+                // Build update fields dynamically
+                const updateFields: string[] = [];
+                const updateValues: any[] = [];
+                let paramIndex = 1;
+
+                // Add sanitized updates to query
+                for (const [key, value] of Object.entries(sanitizedUpdates)) {
+                    if (value !== undefined) {
+                        updateFields.push(`"${key}" = $${paramIndex}`);
+                        updateValues.push(value);
+                        paramIndex++;
+                    }
+                }
+
+                // Always increment version and update timestamp
+                updateFields.push('version = version + 1');
+                updateFields.push('"updatedAt" = NOW()');
+
+                // Add WHERE clause parameters
+                const idParam = paramIndex;
+                const versionParam = paramIndex + 1;
+                updateValues.push(id, expectedVersion);
+
+                // Execute atomic update
+                const result = await tx.$executeRaw`
+                    UPDATE "Project"
+                    SET ${Prisma.raw(updateFields.join(', '))}
+                    WHERE id = ${id}::uuid AND version = ${expectedVersion}
+                `;
+
+                // Verify exactly 1 row affected (version matched)
+                if (result !== 1) {
+                    throw AppError.conflict(
+                        'Project modified by another user',
+                        'VERSION_CONFLICT',
+                        { expectedVersion }
+                    );
+                }
+
+                // Create history if needed
+                if (historyCreate) {
+                    await tx.historyItem.create({
+                        data: historyCreate.create
+                    });
+                }
+
+                // Fetch updated project
+                const up = await tx.project.findUnique({
                     where: { id },
-                    data: {
-                        ...sanitizedUpdates,
-                        history: historyCreate
-                    },
                     include: {
                         assignedDesigner: { select: { id: true, name: true, avatar: true, tenantId: true } },
                         assignedDevManager: { select: { id: true, name: true, avatar: true, tenantId: true } },
                         assignedQA: { select: { id: true, name: true, avatar: true, tenantId: true } }
                     }
                 });
+
+                if (!up) {
+                    throw AppError.notFound('Project not found after update', 'PROJECT_NOT_FOUND');
+                }
 
                 await logAudit({
                     action: 'PROJECT_UPDATE_ADMIN',
@@ -399,26 +461,72 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                     action: newHistoryItem.action,
                     timestamp: new Date(),
                     userId: userId,
+                    projectId: id,
                     tenantId: tenantId,
                     rejectionSnapshot: newHistoryItem.rejectionSnapshot || undefined
                 }
             };
         }
 
-        // Member Update Transaction
+        // Member Update Transaction with Atomic Version Increment
         const updatedProject = await prisma.$transaction(async (tx) => {
-            const up = await tx.project.update({
+            // Build update fields dynamically
+            const updateFields: string[] = [];
+            const updateValues: any[] = [];
+            let paramIndex = 1;
+
+            // Add allowed updates to query
+            for (const [key, value] of Object.entries(allowedUpdates)) {
+                if (value !== undefined) {
+                    updateFields.push(`"${key}" = $${paramIndex}`);
+                    updateValues.push(JSON.stringify(value)); // Checklists are JSONB
+                    paramIndex++;
+                }
+            }
+
+            // Always increment version and update timestamp
+            updateFields.push('version = version + 1');
+            updateFields.push('"updatedAt" = NOW()');
+
+            // Add WHERE clause parameters
+            updateValues.push(id, expectedVersion);
+
+            // Execute atomic update
+            const result = await tx.$executeRaw`
+                UPDATE "Project"
+                SET ${Prisma.raw(updateFields.join(', '))}
+                WHERE id = ${id}::uuid AND version = ${expectedVersion}
+            `;
+
+            // Verify exactly 1 row affected (version matched)
+            if (result !== 1) {
+                throw AppError.conflict(
+                    'Project modified by another user',
+                    'VERSION_CONFLICT',
+                    { expectedVersion }
+                );
+            }
+
+            // Create history if needed
+            if (historyCreate) {
+                await tx.historyItem.create({
+                    data: historyCreate.create
+                });
+            }
+
+            // Fetch updated project
+            const up = await tx.project.findUnique({
                 where: { id },
-                data: {
-                    ...allowedUpdates,
-                    history: historyCreate
-                },
                 include: {
                     assignedDesigner: { select: { id: true, name: true, avatar: true, tenantId: true } },
                     assignedDevManager: { select: { id: true, name: true, avatar: true, tenantId: true } },
                     assignedQA: { select: { id: true, name: true, avatar: true, tenantId: true } }
                 }
             });
+
+            if (!up) {
+                throw AppError.notFound('Project not found after update', 'PROJECT_NOT_FOUND');
+            }
 
             await logAudit({
                 action: 'PROJECT_UPDATE_MEMBER',
@@ -538,28 +646,25 @@ export const addComment = async (req: Request, res: Response, next: NextFunction
     }
 };
 
-/**
- * NEW SECURE ENDPOINT: Advance project stage
- * Server calculates all scores - client cannot influence
- */
 export const advanceStage = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { nextStage } = advanceStageSchema.parse(req.body);
+        const { nextStage, version } = advanceStageSchema.parse(req.body);
         const userId = req.user?.id;
         const tenantId = req.user?.tenantId;
 
         if (!userId || !tenantId) {
             throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
         }
-        // nextStage check handled by Zod
+        // nextStage and version checks handled by Zod
 
 
         const updatedProject = await projectsService.advanceProjectStage({
             projectId: id,
             nextStage,
             userId,
-            tenantId
+            tenantId,
+            version // VERSION ENFORCEMENT: Pass to service layer
         });
 
         res.json(updatedProject);
@@ -568,28 +673,25 @@ export const advanceStage = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
-/**
- * NEW SECURE ENDPOINT: Record QA feedback
- * Server calculates penalties/bonuses - client cannot influence
- */
 export const recordQAFeedback = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { passed } = recordQAFeedbackSchema.parse(req.body);
+        const { passed, version } = recordQAFeedbackSchema.parse(req.body);
         const userId = req.user?.id;
         const tenantId = req.user?.tenantId;
 
         if (!userId || !tenantId) {
             throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
         }
-        // passed check handled by Zod
+        // passed and version checks handled by Zod
 
 
         const updatedProject = await projectsService.recordQAFeedback({
             projectId: id,
             passed,
             userId,
-            tenantId
+            tenantId,
+            version // VERSION ENFORCEMENT: Pass to service layer
         });
 
         res.json(updatedProject);

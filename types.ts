@@ -87,6 +87,10 @@ export interface Project {
 
   createdAt: string;
   completedAt?: string;
+
+  // Version control for optimistic locking
+  version: number;
+  updatedAt: string;
 }
 
 export interface DevPerformance {

@@ -56,7 +56,10 @@ export const adminUpdateProjectSchema = z.object({
     newHistoryItem: z.object({
         action: z.string().max(200),
         rejectionSnapshot: z.array(z.any()).max(50).optional()
-    }).optional()
+    }).optional(),
+
+    // VERSION ENFORCEMENT: Required for optimistic locking
+    version: z.number().int().positive()
 }).strict(); // REJECTS unknown fields
 
 // === MEMBER AUTHORITY SCHEMA ===
@@ -78,7 +81,10 @@ export const memberUpdateProjectSchema = z.object({
     newHistoryItem: z.object({
         action: z.string().max(200),
         rejectionSnapshot: z.array(z.any()).max(50).optional()
-    }).optional()
+    }).optional(),
+
+    // VERSION ENFORCEMENT: Required for optimistic locking
+    version: z.number().int().positive()
 }).strict(); // REJECTS Any Admin field attempts
 
 export const addCommentSchema = z.object({
@@ -86,9 +92,13 @@ export const addCommentSchema = z.object({
 }).strict();
 
 export const advanceStageSchema = z.object({
-    nextStage: z.enum(['UPCOMING', 'DESIGN', 'DEVELOPMENT', 'QA', 'SEND_TO_CLIENT', 'ADMIN_REVIEW', 'SENT_TO_CLIENT', 'COMPLETED'])
+    nextStage: z.enum(['UPCOMING', 'DESIGN', 'DEVELOPMENT', 'QA', 'SEND_TO_CLIENT', 'ADMIN_REVIEW', 'SENT_TO_CLIENT', 'COMPLETED']),
+    // VERSION ENFORCEMENT: Required for optimistic locking
+    version: z.number().int().positive()
 }).strict();
 
 export const recordQAFeedbackSchema = z.object({
-    passed: z.boolean()
+    passed: z.boolean(),
+    // VERSION ENFORCEMENT: Required for optimistic locking
+    version: z.number().int().positive()
 }).strict();
