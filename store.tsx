@@ -126,20 +126,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       await queryClient.cancelQueries({ queryKey: ['project', id] });
 
       // Snapshot previous values
-      const previousProjects = queryClient.getQueryData<Project[]>(['projects']);
+      // We need to be specific about the page we are on for the list update
+      const previousProjects = queryClient.getQueryData<{ data: Project[], meta: any }>(['projects', page]);
       const previousProject = queryClient.getQueryData<Project>(['project', id]);
 
       // Optimistically update list
       if (previousProjects) {
-        queryClient.setQueryData<Project[]>(['projects'], (old) => {
-          if (!old) return [];
-          return old.map((p) => {
-            if (p.id === id) {
-              const { newHistoryItem, ...actualUpdates } = updates;
-              return { ...p, ...actualUpdates };
-            }
-            return p;
-          });
+        queryClient.setQueryData<{ data: Project[], meta: any }>(['projects', page], (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: old.data.map((p) => {
+              if (p.id === id) {
+                const { newHistoryItem, ...actualUpdates } = updates;
+                return { ...p, ...actualUpdates };
+              }
+              return p;
+            })
+          };
         });
       }
 
@@ -157,7 +161,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     onError: (err, newTodo, context) => {
       if (context?.previousProjects) {
-        queryClient.setQueryData(['projects'], context.previousProjects);
+        queryClient.setQueryData(['projects', page], context.previousProjects);
       }
       if (context?.previousProject) {
         queryClient.setQueryData(['project', newTodo.id], context.previousProject);

@@ -21,25 +21,25 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick }) =>
 
     switch (project.stage) {
       case ProjectStage.DESIGN:
-        completed = project.designChecklist.filter(i => i.completed).length;
-        total = project.designChecklist.length;
+        completed = (project.designChecklist || []).filter(i => i.completed).length;
+        total = (project.designChecklist || []).length;
         break;
       case ProjectStage.DEVELOPMENT:
-        completed = project.devChecklist.filter(i => i.completed).length;
-        total = project.devChecklist.length;
+        completed = (project.devChecklist || []).filter(i => i.completed).length;
+        total = (project.devChecklist || []).length;
         break;
       case ProjectStage.QA:
-        completed = project.qaChecklist.filter(i => i.completed).length;
-        total = project.qaChecklist.length;
+        completed = (project.qaChecklist || []).filter(i => i.completed).length;
+        total = (project.qaChecklist || []).length;
         break;
       case ProjectStage.ADMIN_REVIEW:
-        completed = project.finalChecklist.filter(i => i.completed).length;
-        total = project.finalChecklist.length;
+        completed = (project.finalChecklist || []).filter(i => i.completed).length;
+        total = (project.finalChecklist || []).length;
         break;
       default:
         // For UPCOMING and COMPLETED stages, show design checklist as reference
-        completed = project.designChecklist.filter(i => i.completed).length;
-        total = project.designChecklist.length;
+        completed = (project.designChecklist || []).filter(i => i.completed).length;
+        total = (project.designChecklist || []).length;
     }
 
     return { completed, total };
@@ -101,10 +101,20 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick }) =>
         </Badge>
       </div>
 
-      {/* Progress Percentage */}
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-slate-500 dark:text-slate-400 font-medium">Progress</span>
-        <span className="font-bold text-slate-900 dark:text-slate-100">{progressPercentage}%</span>
+      {/* Progress Bar & Count */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-slate-500 dark:text-slate-400 font-medium">Tasks Completed</span>
+          <span className="font-bold text-slate-900 dark:text-slate-100">
+            {checklistProgress.completed}/{checklistProgress.total}
+          </span>
+        </div>
+        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-700/50 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-indigo-500 rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${progressPercentage}%` }}
+          />
+        </div>
       </div>
 
       {/* Checklist Progress */}
