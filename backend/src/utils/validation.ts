@@ -102,3 +102,38 @@ export const recordQAFeedbackSchema = z.object({
     // VERSION ENFORCEMENT: Required for optimistic locking
     version: z.number().int().positive()
 }).strict();
+
+// Phase 2A: Admin deadline modification
+export const changeDeadlineSchema = z.object({
+    newDeadline: z.string().datetime(),
+    justification: z.string().min(15, 'Justification must be at least 15 characters'),
+    confirm: z.literal(true, { errorMap: () => ({ message: 'Confirmation required' }) }),
+    version: z.number().int().positive()
+}).strict();
+
+// Phase 2A: Lead reassignment
+export const reassignLeadSchema = z.object({
+    role: z.enum(['DESIGN', 'DEV', 'QA']),
+    userId: z.string().uuid(),
+    version: z.number().int().positive()
+}).strict();
+
+// Phase 2A: Team member operations
+export const addTeamMemberSchema = z.object({
+    leadRole: z.enum(['DESIGN', 'DEV']),
+    name: z.string().min(1).max(100),
+    roleTitle: z.string().min(1).max(100),
+    notes: z.string().max(500).optional(),
+    version: z.number().int().positive()
+}).strict();
+
+export const updateTeamMemberSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    roleTitle: z.string().min(1).max(100).optional(),
+    notes: z.string().max(500).optional().nullable(),
+    version: z.number().int().positive()
+}).strict();
+
+export const deleteTeamMemberSchema = z.object({
+    version: z.number().int().positive()
+}).strict();

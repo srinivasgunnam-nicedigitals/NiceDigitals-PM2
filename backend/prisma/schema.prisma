@@ -36,6 +36,11 @@ enum Priority {
   URGENT
 }
 
+enum TeamLeadRole {
+  DESIGN
+  DEV
+}
+
 model Tenant {
   id        String    @id @default(uuid())
   name      String
@@ -48,6 +53,7 @@ model Tenant {
   scores    ScoreEntry[]
   notifications Notification[]
   auditLogs     AuditLog[]
+  teamMembers   ProjectTeamMember[]
 }
 
 model AuditLog {
@@ -158,6 +164,7 @@ model Project {
   comments     Comment[]
   history      HistoryItem[]
   scores       ScoreEntry[]
+  teamMembers  ProjectTeamMember[]
 
   @@index([tenantId])
   @@index([assignedDevManagerId])
@@ -230,4 +237,23 @@ model Notification {
   @@index([userId])
   @@index([tenantId])
   @@index([tenantId, timestamp])
+}
+
+model ProjectTeamMember {
+  id        String       @id @default(uuid())
+  projectId String
+  tenantId  String
+  leadRole  TeamLeadRole
+  name      String
+  roleTitle String
+  notes     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tenant    Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@index([projectId])
+  @@index([tenantId])
+  @@index([projectId, leadRole])
 }

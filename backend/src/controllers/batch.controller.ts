@@ -162,7 +162,7 @@ async function batchUpdateStage(
             await prisma.$executeRaw`
                 UPDATE "Project" 
                 SET stage = ${stage}::"ProjectStage", version = version + 1, "updatedAt" = NOW()
-                WHERE id = ${projectId}::uuid
+                WHERE id = ${projectId}::uuid AND "tenantId" = ${tenantId}
             `;
 
             results.push({
@@ -237,19 +237,19 @@ async function batchAssignUser(
                 await prisma.$executeRaw`
                     UPDATE "Project" 
                     SET "assignedDesignerId" = ${assigneeId}::uuid, version = version + 1, "updatedAt" = NOW()
-                    WHERE id = ${projectId}::uuid
+                    WHERE id = ${projectId}::uuid AND "tenantId" = ${tenantId}
                 `;
             } else if (role === 'dev') {
                 await prisma.$executeRaw`
                     UPDATE "Project" 
                     SET "assignedDevManagerId" = ${assigneeId}::uuid, version = version + 1, "updatedAt" = NOW()
-                    WHERE id = ${projectId}::uuid
+                    WHERE id = ${projectId}::uuid AND "tenantId" = ${tenantId}
                 `;
             } else if (role === 'qa') {
                 await prisma.$executeRaw`
                     UPDATE "Project" 
                     SET "assignedQAId" = ${assigneeId}::uuid, version = version + 1, "updatedAt" = NOW()
-                    WHERE id = ${projectId}::uuid
+                    WHERE id = ${projectId}::uuid AND "tenantId" = ${tenantId}
                 `;
             }
 

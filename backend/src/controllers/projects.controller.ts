@@ -4,7 +4,19 @@ import { ProjectStage, Prisma } from '@prisma/client';
 
 
 import * as projectsService from '../services/projects.service';
-import { createProjectSchema, adminUpdateProjectSchema, memberUpdateProjectSchema, addCommentSchema, advanceStageSchema, recordQAFeedbackSchema } from '../utils/validation';
+import {
+    createProjectSchema,
+    adminUpdateProjectSchema,
+    memberUpdateProjectSchema,
+    addCommentSchema,
+    advanceStageSchema,
+    recordQAFeedbackSchema,
+    changeDeadlineSchema,
+    reassignLeadSchema,
+    addTeamMemberSchema,
+    updateTeamMemberSchema,
+    deleteTeamMemberSchema
+} from '../utils/validation';
 import { logAudit } from '../utils/audit';
 
 import { AppError } from '../utils/AppError';
@@ -43,6 +55,7 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
                     isDelayed: true,
                     createdAt: true,
                     tenantId: true,
+                    version: true, // VERSION ENFORCEMENT: Include version in response
 
                     // Relations (Summary only)
                     assignedDesignerId: true,
@@ -278,7 +291,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
         // 1. Fetch Project to verify Ownership / Assignment
         const existing = await prisma.project.findUnique({
             where: { id },
-            select: { id: true, tenantId: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, stage: true, name: true, version: true, assignedDesigner: true, assignedDevManager: true, assignedQA: true }
+            select: { id: true, tenantId: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, stage: true, name: true, version: true, updatedAt: true, assignedDesigner: true, assignedDevManager: true, assignedQA: true }
         });
 
         if (!existing || existing.tenantId !== tenantId) {
@@ -294,7 +307,8 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                 error: 'Conflict: Project modified by another user',
                 errorCode: 'VERSION_CONFLICT',
                 currentVersion: existing.version,
-                expectedVersion: expectedVersion
+                expectedVersion: expectedVersion,
+                updatedAt: existing.updatedAt
             });
         }
 

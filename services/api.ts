@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Project, User, ScoreEntry, Comment, HistoryItem } from '../types';
+import { Project, User, ScoreEntry, Comment, HistoryItem, ProjectTeamMember, TeamLeadRole } from '../types';
 
 const getBaseURL = () => {
     const rawUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
@@ -231,5 +231,108 @@ export const backendApi = {
 
     clearNotifications: async () => {
         await api.delete('notifications');
+    },
+
+    // ============================================
+    // PHASE 2A: MUTATION-GOVERNED ENDPOINTS
+    // ============================================
+
+    /**
+     * Change project deadline (Admin only)
+     * VERSION HARD GUARD: Throws if version missing
+     */
+    changeDeadline: async (projectId: string, data: {
+        newDeadline: string;
+        justification: string;
+        confirm: boolean;
+        version: number;
+    }) => {
+        // VERSION HARD GUARD
+        if (data.version === undefined || data.version === null) {
+            throw new Error('VERSION_REQUIRED: Cannot change deadline without version');
+        }
+
+        const response = await api.patch<Project>(`projects/${projectId}/change-deadline`, data);
+        return response.data;
+    },
+
+    /**
+     * Reassign project lead (Admin only)
+     * VERSION HARD GUARD: Throws if version missing
+     */
+    reassignLead: async (projectId: string, data: {
+        role: 'DESIGN' | 'DEV' | 'QA';
+        userId: string;
+        version: number;
+    }) => {
+        // VERSION HARD GUARD
+        if (data.version === undefined || data.version === null) {
+            throw new Error('VERSION_REQUIRED: Cannot reassign lead without version');
+        }
+
+        const response = await api.patch<Project>(`projects/${projectId}/reassign-lead`, data);
+        return response.data;
+    },
+
+    /**
+     * Add team member (Admin OR assigned lead)
+     * VERSION HARD GUARD: Throws if version missing
+     */
+    addTeamMember: async (projectId: string, data: {
+        leadRole: TeamLeadRole;
+        name: string;
+        roleTitle: string;
+        notes?: string;
+        version: number;
+    }) => {
+        // VERSION HARD GUARD
+        if (data.version === undefined || data.version === null) {
+            throw new Error('VERSION_REQUIRED: Cannot add team member without version');
+        }
+
+        const response = await api.post<ProjectTeamMember>(`projects/${projectId}/team-members`, data);
+        return response.data;
+    },
+
+    /**
+     * Update team member (Admin OR assigned lead)
+     * VERSION HARD GUARD: Throws if version missing
+     */
+    updateTeamMember: async (projectId: string, memberId: string, data: {
+        name?: string;
+        roleTitle?: string;
+        notes?: string;
+        version: number;
+    }) => {
+        // VERSION HARD GUARD
+        if (data.version === undefined || data.version === null) {
+            throw new Error('VERSION_REQUIRED: Cannot update team member without version');
+        }
+
+        const response = await api.patch<ProjectTeamMember>(`projects/${projectId}/team-members/${memberId}`, data);
+        return response.data;
+    },
+
+    /**
+     * Delete team member (Admin OR assigned lead)
+     * VERSION HARD GUARD: Throws if version missing
+     */
+    deleteTeamMember: async (projectId: string, memberId: string, version: number) => {
+        // VERSION HARD GUARD
+        if (version === undefined || version === null) {
+            throw new Error('VERSION_REQUIRED: Cannot delete team member without version');
+        }
+
+        await api.delete(`projects/${projectId}/team-members/${memberId}`, {
+            data: { version }
+        });
+    },
+
+    /**
+     * Get team members for a project
+     */
+    getTeamMembers: async (projectId: string) => {
+        const response = await api.get<ProjectTeamMember[]>(`projects/${projectId}/team-members`);
+        return response.data;
     }
 };

@@ -136,7 +136,7 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
                 "completedAt" = ${completedAt || null}::timestamp,
                 version = version + 1,
                 "updatedAt" = NOW()
-            WHERE id = ${projectId}::uuid AND version = ${version}
+            WHERE id = ${projectId}::uuid AND "tenantId" = ${tenantId} AND version = ${version}
         `;
 
         // Verify update succeeded (version matched)
@@ -248,7 +248,7 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
                 SET stage = 'ADMIN_REVIEW'::"ProjectStage",
                     version = version + 1,
                     "updatedAt" = NOW()
-                WHERE id = ${projectId}::uuid AND version = ${version}
+                WHERE id = ${projectId}::uuid AND "tenantId" = ${tenantId} AND version = ${version}
             `;
 
             // Verify update succeeded (version matched)
@@ -316,7 +316,7 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
                     "qaChecklist" = ${JSON.stringify(resetQA)}::jsonb,
                     version = version + 1,
                     "updatedAt" = NOW()
-                WHERE id = ${projectId}::uuid AND version = ${version}
+                WHERE id = ${projectId}::uuid AND "tenantId" = ${tenantId} AND version = ${version}
             `;
 
             // Verify update succeeded (version matched)

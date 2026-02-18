@@ -102,3 +102,21 @@ export interface DevPerformance {
   qaFailureRate: number;
   onTimeDeliveryRate: number;
 }
+
+// Phase 2A: Team member types
+export enum TeamLeadRole {
+  DESIGN = 'DESIGN',
+  DEV = 'DEV'
+}
+
+export interface ProjectTeamMember {
+  id: string;
+  projectId: string;
+  tenantId: string;
+  leadRole: TeamLeadRole;
+  name: string;
+  roleTitle: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}

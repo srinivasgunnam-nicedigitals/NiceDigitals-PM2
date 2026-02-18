@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticateToken, requireAdmin } from '../middleware/auth.middleware';
 import * as projectsController from '../controllers/projects.controller';
 import * as batchController from '../controllers/batch.controller';
+import * as phase2aController from '../controllers/phase2a.controller';
 
 const router = Router();
 
@@ -32,5 +33,16 @@ router.post('/:id/comments', projectsController.addComment);
 // Secure stage advancement (server calculates scores)
 router.post('/:id/advance-stage', projectsController.advanceStage);
 router.post('/:id/qa-feedback', projectsController.recordQAFeedback);
+
+// Phase 2A: Admin deadline modification
+router.patch('/:id/change-deadline', phase2aController.changeDeadline);
+
+// Phase 2A: Admin lead reassignment
+router.patch('/:id/reassign-lead', phase2aController.reassignLead);
+
+// Phase 2A: Team member operations
+router.post('/:id/team-members', phase2aController.addTeamMember);
+router.patch('/:id/team-members/:memberId', phase2aController.updateTeamMember);
+router.delete('/:id/team-members/:memberId', phase2aController.deleteTeamMember);
 
 export default router;

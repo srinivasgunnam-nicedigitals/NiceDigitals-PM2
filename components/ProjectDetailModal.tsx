@@ -15,6 +15,9 @@ import {
   RotateCcw, Edit3, Link as LinkIcon, Image as ImageIcon, Calendar, Archive, Trash2
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { TeamTab } from './TeamTab';
+import { ChangeDeadlineModal } from './ChangeDeadlineModal';
+import { ReassignLeadModal } from './ReassignLeadModal';
 
 interface ProjectDetailModalProps {
   project: Project;
@@ -122,13 +125,17 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
   const { updateProject, advanceStage, recordQAFeedback, deleteProject, currentUser, users, archiveProject } = useApp();
   const { showConfirm, showPrompt } = useModal();
-  const [activeTab, setActiveTab] = useState<'checklist' | 'details' | 'history'>('checklist');
+  const [activeTab, setActiveTab] = useState<'checklist' | 'details' | 'history' | 'team'>('checklist');
   const [editScope, setEditScope] = useState(sanitizeScopeHtml(project.scope));
   const [isSaving, setIsSaving] = useState(false);
   const [showLinkInput, setShowLinkInput] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [savedRange, setSavedRange] = useState<Range | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
+
+  // Phase 2A modal states
+  const [showDeadlineModal, setShowDeadlineModal] = useState(false);
+  const [showReassignModal, setShowReassignModal] = useState(false);
 
   useEffect(() => {
     const sanitized = sanitizeScopeHtml(project.scope);
@@ -353,6 +360,28 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
             </div>
 
             <div className="flex items-center gap-4">
+              {/* Phase 2A: Admin-only deadline and lead management */}
+              {currentUser?.role === UserRole.ADMIN && (
+                <>
+                  <button
+                    onClick={() => setShowDeadlineModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold uppercase tracking-wider rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-all border border-indigo-200 dark:border-indigo-800/50"
+                    title="Change Deadline"
+                  >
+                    <Calendar size={14} />
+                    Change Deadline
+                  </button>
+                  <button
+                    onClick={() => setShowReassignModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold uppercase tracking-wider rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-all border border-emerald-200 dark:border-emerald-800/50"
+                    title="Reassign Lead"
+                  >
+                    <UserPlus size={14} />
+                    Reassign Lead
+                  </button>
+                </>
+              )}
+
               {currentUser?.role === UserRole.ADMIN && (
                 <button
                   onClick={handleDeleteProject}
@@ -390,6 +419,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                 {[
                   { id: 'checklist', label: 'Tasks', icon: <CheckCircle size={14} /> },
                   { id: 'details', label: 'Brief', icon: <Edit3 size={14} /> },
+                  { id: 'team', label: 'Team', icon: <UserIcon size={14} /> },
                   { id: 'history', label: 'History', icon: <History size={14} /> }
                 ].map(tab => (
                   <button
@@ -608,6 +638,10 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                 ))}
               </div>
             )}
+
+            {activeTab === 'team' && (
+              <TeamTab project={project} />
+            )}
           </div>
         </div>
 
@@ -619,5 +653,24 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  return (
+    <>
+      {createPortal(modalContent, document.body)}
+
+      {/* Phase 2A Modals */}
+      {showDeadlineModal && (
+        <ChangeDeadlineModal
+          project={project}
+          onClose={() => setShowDeadlineModal(false)}
+        />
+      )}
+      {showReassignModal && (
+        <ReassignLeadModal
+          project={project}
+          users={users}
+          onClose={() => setShowReassignModal(false)}
+        />
+      )}
+    </>
+  );
 };
