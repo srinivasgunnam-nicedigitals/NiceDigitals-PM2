@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { ResetPasswordModal } from '../components/ResetPasswordModal';
 
 export const Login = () => {
-    const { setCurrentUser, users } = useApp();
+    const { setCurrentUser } = useApp();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -31,18 +31,6 @@ export const Login = () => {
         } finally {
             setIsLoading(false);
         }
-    };
-
-    const handleDemoLogin = () => {
-        setIsLoading(true);
-        setTimeout(() => {
-            if (users.length > 0) {
-                setCurrentUser(users[0]);
-            } else {
-                setError('No users available to login');
-                setIsLoading(false);
-            }
-        }, 600);
     };
 
     return (

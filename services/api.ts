@@ -89,6 +89,11 @@ export const backendApi = {
         return response.data;
     },
 
+    logout: async () => {
+        const response = await api.post<{ message: string }>('auth/logout');
+        return response.data;
+    },
+
     // Bootstrap data (simulates initial load)
     getBootstrapData: async () => {
         const response = await api.get<{ users: User[], projects: Project[] }>('bootstrap');

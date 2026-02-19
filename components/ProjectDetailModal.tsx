@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { backendApi } from '../services/api';
+import DOMPurify from 'dompurify';
 
 import { Project, ProjectStage, UserRole, Comment } from '../types';
 import { useApp } from '../store';
@@ -26,11 +27,7 @@ interface ProjectDetailModalProps {
 
 const sanitizeScopeHtml = (html: string | undefined | null): string => {
   if (!html || typeof html !== 'string') return '';
-  return html
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
-    .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
-    .replace(/javascript:/gi, '');
+  return DOMPurify.sanitize(html);
 };
 
 const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClose: () => void }) => {

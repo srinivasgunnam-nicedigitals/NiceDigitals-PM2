@@ -88,20 +88,18 @@ export const changeDeadline = async (req: Request, res: Response, next: NextFunc
             }
 
             // Audit log
-            await tx.auditLog.create({
-                data: {
-                    action: 'DEADLINE_CHANGED',
-                    target: `Project ${id}`,
-                    actorId: userId!,
-                    actorEmail: req.user?.email || '',
-                    tenantId: tenantId!,
-                    metadata: {
-                        oldDeadline: existing.overallDeadline,
-                        newDeadline: deadlineDate,
-                        justification
-                    }
+            await logAudit({
+                action: 'DEADLINE_CHANGED',
+                target: `Project ${id}`,
+                actorId: userId!,
+                actorEmail: req.user?.email || '',
+                tenantId: tenantId!,
+                metadata: {
+                    oldDeadline: existing.overallDeadline,
+                    newDeadline: deadlineDate,
+                    justification
                 }
-            });
+            }, tx);
 
             // Return updated project
             return tx.project.findUnique({ where: { id } });
@@ -216,20 +214,18 @@ export const reassignLead = async (req: Request, res: Response, next: NextFuncti
             }
 
             // Audit log
-            await tx.auditLog.create({
-                data: {
-                    action: 'LEAD_REASSIGNED',
-                    target: `Project ${id}`,
-                    actorId: userId!,
-                    actorEmail: req.user?.email || '',
-                    tenantId: tenantId!,
-                    metadata: {
-                        role,
-                        previousUserId,
-                        newUserId
-                    }
+            await logAudit({
+                action: 'LEAD_REASSIGNED',
+                target: `Project ${id}`,
+                actorId: userId!,
+                actorEmail: req.user?.email || '',
+                tenantId: tenantId!,
+                metadata: {
+                    role,
+                    previousUserId,
+                    newUserId
                 }
-            });
+            }, tx);
 
             // Return updated project with relations
             return tx.project.findUnique({
@@ -327,21 +323,19 @@ export const addTeamMember = async (req: Request, res: Response, next: NextFunct
             });
 
             // Audit log
-            await tx.auditLog.create({
-                data: {
-                    action: 'TEAM_MEMBER_ADDED',
-                    target: `Project ${projectId}`,
-                    actorId: userId!,
-                    actorEmail: req.user?.email || '',
-                    tenantId: tenantId!,
-                    metadata: {
-                        memberId: member.id,
-                        leadRole,
-                        name,
-                        roleTitle
-                    }
+            await logAudit({
+                action: 'TEAM_MEMBER_ADDED',
+                target: `Project ${projectId}`,
+                actorId: userId!,
+                actorEmail: req.user?.email || '',
+                tenantId: tenantId!,
+                metadata: {
+                    memberId: member.id,
+                    leadRole,
+                    name,
+                    roleTitle
                 }
-            });
+            }, tx);
 
             return member;
         });
@@ -439,19 +433,17 @@ export const updateTeamMember = async (req: Request, res: Response, next: NextFu
             });
 
             // Audit log
-            await tx.auditLog.create({
-                data: {
-                    action: 'TEAM_MEMBER_UPDATED',
-                    target: `Project ${projectId}`,
-                    actorId: userId!,
-                    actorEmail: req.user?.email || '',
-                    tenantId: tenantId!,
-                    metadata: {
-                        memberId,
-                        updates: { name, roleTitle, notes }
-                    }
+            await logAudit({
+                action: 'TEAM_MEMBER_UPDATED',
+                target: `Project ${projectId}`,
+                actorId: userId!,
+                actorEmail: req.user?.email || '',
+                tenantId: tenantId!,
+                metadata: {
+                    memberId,
+                    updates: { name, roleTitle, notes }
                 }
-            });
+            }, tx);
 
             return updated;
         });
@@ -544,20 +536,18 @@ export const deleteTeamMember = async (req: Request, res: Response, next: NextFu
             });
 
             // Audit log
-            await tx.auditLog.create({
-                data: {
-                    action: 'TEAM_MEMBER_REMOVED',
-                    target: `Project ${projectId}`,
-                    actorId: userId!,
-                    actorEmail: req.user?.email || '',
-                    tenantId: tenantId!,
-                    metadata: {
-                        memberId,
-                        memberName: member.name,
-                        leadRole: member.leadRole
-                    }
+            await logAudit({
+                action: 'TEAM_MEMBER_REMOVED',
+                target: `Project ${projectId}`,
+                actorId: userId!,
+                actorEmail: req.user?.email || '',
+                tenantId: tenantId!,
+                metadata: {
+                    memberId,
+                    memberName: member.name,
+                    leadRole: member.leadRole
                 }
-            });
+            }, tx);
         });
 
         res.status(204).send();

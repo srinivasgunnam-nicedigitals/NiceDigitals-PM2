@@ -1,6 +1,7 @@
 import { prisma } from '../config/db';
 import { differenceInDays, parseISO } from 'date-fns';
 import { AppError } from '../utils/AppError';
+import { logAudit } from '../utils/audit';
 
 // Scoring rules - moved from frontend constants
 const SCORING_RULES = {
@@ -184,6 +185,16 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
             });
         }
 
+        // AUDIT: Stage advancement (fail-closed, inside tx)
+        await logAudit({
+            action: 'STAGE_ADVANCED',
+            target: `Project: ${projectId}`,
+            actorId: userId,
+            actorEmail: '',
+            tenantId,
+            metadata: { previousStage: project.stage, nextStage, version, newVersion: version + 1 }
+        }, tx);
+
         return updatedProject;
     });
 
@@ -296,6 +307,16 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
                 });
             }
 
+            // AUDIT: QA pass (fail-closed, inside tx)
+            await logAudit({
+                action: 'QA_FEEDBACK_PASS',
+                target: `Project: ${projectId}`,
+                actorId: userId,
+                actorEmail: '',
+                tenantId,
+                metadata: { previousStage: 'QA', nextStage: 'ADMIN_REVIEW', version, newVersion: version + 1, qaFirstPass: project.qaFailCount === 0 }
+            }, tx);
+
             return updatedProject;
         });
 
@@ -367,6 +388,16 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
                     tenantId
                 }
             });
+
+            // AUDIT: QA fail (fail-closed, inside tx)
+            await logAudit({
+                action: 'QA_FEEDBACK_FAIL',
+                target: `Project: ${projectId}`,
+                actorId: userId,
+                actorEmail: '',
+                tenantId,
+                metadata: { previousStage: 'QA', nextStage: 'DEVELOPMENT', version, newVersion: version + 1, qaFailCount: (project.qaFailCount || 0) + 1 }
+            }, tx);
 
             return updatedProject;
         });

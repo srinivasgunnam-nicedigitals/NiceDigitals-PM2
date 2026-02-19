@@ -12,6 +12,7 @@ interface BulkActionToolbarProps {
     onBulkArchive: () => void;
     onBulkDelete: () => void;
     users: any[];
+    currentUser?: { role: string } | null;
 }
 
 export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
@@ -21,7 +22,8 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
     onBulkAssign,
     onBulkArchive,
     onBulkDelete,
-    users
+    users,
+    currentUser
 }) => {
     const [showStageMenu, setShowStageMenu] = React.useState(false);
     const [showAssignMenu, setShowAssignMenu] = React.useState(false);
@@ -53,32 +55,34 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
                     {/* Actions */}
                     <div className="flex items-center gap-2">
                         {/* Change Stage */}
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowStageMenu(!showStageMenu)}
-                                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
-                            >
-                                <ArrowRight size={16} />
-                                Change Stage
-                            </button>
-                            {showStageMenu && (
-                                <div className="absolute bottom-full mb-2 left-0 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-10">
-                                    {Object.entries(STAGE_CONFIG).map(([stage, config]) => (
-                                        <button
-                                            key={stage}
-                                            onClick={() => {
-                                                onBulkStageChange(stage as ProjectStage);
-                                                setShowStageMenu(false);
-                                            }}
-                                            className="w-full px-4 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
-                                        >
-                                            <span className={config.color}>{config.icon}</span>
-                                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{config.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                        {currentUser?.role === UserRole.ADMIN && (
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowStageMenu(!showStageMenu)}
+                                    className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
+                                >
+                                    <ArrowRight size={16} />
+                                    Change Stage
+                                </button>
+                                {showStageMenu && (
+                                    <div className="absolute bottom-full mb-2 left-0 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-10">
+                                        {Object.entries(STAGE_CONFIG).map(([stage, config]) => (
+                                            <button
+                                                key={stage}
+                                                onClick={() => {
+                                                    onBulkStageChange(stage as ProjectStage);
+                                                    setShowStageMenu(false);
+                                                }}
+                                                className="w-full px-4 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
+                                            >
+                                                <span className={config.color}>{config.icon}</span>
+                                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{config.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Assign Team */}
                         <div className="relative">
@@ -144,22 +148,26 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
                         </div>
 
                         {/* Archive */}
-                        <button
-                            onClick={onBulkArchive}
-                            className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
-                        >
-                            <Archive size={16} />
-                            Archive
-                        </button>
+                        {currentUser?.role === UserRole.ADMIN && (
+                            <button
+                                onClick={onBulkArchive}
+                                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
+                            >
+                                <Archive size={16} />
+                                Archive
+                            </button>
+                        )}
 
                         {/* Delete */}
-                        <button
-                            onClick={() => setShowDeleteConfirm(true)}
-                            className="px-4 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
-                        >
-                            <Trash2 size={16} />
-                            Delete
-                        </button>
+                        {currentUser?.role === UserRole.ADMIN && (
+                            <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="px-4 py-2 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
+                            >
+                                <Trash2 size={16} />
+                                Delete
+                            </button>
+                        )}
                     </div>
 
                     {/* Clear Selection */}

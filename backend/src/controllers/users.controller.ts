@@ -2,6 +2,22 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/db';
 import { passwordService } from '../services/password.service';
 import { logAudit } from '../utils/audit';
+import { z } from 'zod';
+
+export const createUserSchema = z.object({
+    name: z.string().min(1).max(100),
+    email: z.string().email(),
+    password: z.string().min(8).max(100),
+    role: z.enum(['ADMIN', 'DESIGNER', 'DEV_MANAGER', 'QA_ENGINEER']),
+    avatar: z.string().url().optional()
+}).strict();
+
+export const updateUserSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    email: z.string().email().optional(),
+    role: z.enum(['ADMIN', 'DESIGNER', 'DEV_MANAGER', 'QA_ENGINEER']).optional(),
+    avatar: z.string().url().optional()
+}).strict();
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
@@ -59,18 +75,15 @@ export const addUser = async (req: Request, res: Response) => {
 
         if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
 
-        const { name, email, password, role, avatar } = req.body;
-
-        // Validate required fields
-        if (!email || !name || !password || !role) {
-            return res.status(400).json({ error: 'Missing required fields' });
+        // Validate and parse request body with Zod
+        let validated: z.infer<typeof createUserSchema>;
+        try {
+            validated = createUserSchema.parse(req.body);
+        } catch (zodError: any) {
+            return res.status(400).json({ error: zodError.errors?.[0]?.message || 'Invalid request body' });
         }
 
-        // Validate Role enum
-        const validRoles = ['ADMIN', 'DESIGNER', 'DEV_MANAGER', 'QA_ENGINEER'];
-        if (!validRoles.includes(role)) {
-            return res.status(400).json({ error: 'Invalid role' });
-        }
+        const { name, email, password, role, avatar } = validated;
 
         const hashedPassword = await passwordService.hash(password);
 
@@ -189,7 +202,15 @@ export const updateUser = async (req: Request, res: Response) => {
             return res.status(403).json({ error: 'Forbidden: You can only update your own profile' });
         }
 
-        const { name, email, role, avatar } = req.body;
+        // Validate and parse request body with Zod
+        let parsedBody: z.infer<typeof updateUserSchema>;
+        try {
+            parsedBody = updateUserSchema.parse(req.body);
+        } catch (zodError: any) {
+            return res.status(400).json({ error: zodError.errors?.[0]?.message || 'Invalid request body' });
+        }
+
+        const { name, email, role, avatar } = parsedBody;
 
         // Build allowed updates
         const updateData: any = {};

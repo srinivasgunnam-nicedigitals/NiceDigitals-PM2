@@ -22,6 +22,8 @@ export const STAGE_CONFIG = {
   [ProjectStage.DEVELOPMENT]: { label: 'Development', icon: <Code className="w-5 h-5" />, color: 'bg-blue-100 text-blue-600' },
   [ProjectStage.QA]: { label: 'QA Testing', icon: <Search className="w-5 h-5" />, color: 'bg-amber-100 text-amber-600' },
   [ProjectStage.ADMIN_REVIEW]: { label: 'Admin Review', icon: <ShieldCheck className="w-5 h-5" />, color: 'bg-purple-100 text-purple-600' },
+  [ProjectStage.SEND_TO_CLIENT]: { label: 'Send to Client', icon: <Send className="w-5 h-5" />, color: 'bg-sky-100 text-sky-600' },
+  [ProjectStage.SENT_TO_CLIENT]: { label: 'Sent to Client', icon: <ExternalLink className="w-5 h-5" />, color: 'bg-cyan-100 text-cyan-600' },
   [ProjectStage.COMPLETED]: { label: 'Completed', icon: <CheckCircle2 className="w-5 h-5" />, color: 'bg-emerald-100 text-emerald-600' },
 };
 

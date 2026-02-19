@@ -98,19 +98,24 @@ export const batchUpdateProjects = async (req: Request, res: Response, next: Nex
             results
         };
 
-        // Audit log batch operation
-        await logAudit({
-            action: `BATCH_${operation}`,
-            target: `${projectIds.length} projects`,
-            actorId: userId,
-            actorEmail: req.user?.email || '',
-            tenantId,
-            metadata: {
-                operation,
-                totalRequested: projectIds.length,
-                totalSucceeded,
-                totalFailed
-            }
+        // Audit log batch operation — inside a transaction to ensure fail-closed
+        await prisma.$transaction(async (tx) => {
+            await tx.auditOutbox.create({
+                data: {
+                    action: `BATCH_${operation}`,
+                    target: `${projectIds.length} projects`,
+                    actorId: userId,
+                    actorEmail: req.user?.email || '',
+                    tenantId,
+                    metadata: {
+                        operation,
+                        totalRequested: projectIds.length,
+                        totalSucceeded,
+                        totalFailed
+                    },
+                    createdAt: new Date()
+                }
+            });
         });
 
         res.json(response);
@@ -132,6 +137,11 @@ async function batchUpdateStage(
     userRole?: UserRole
 ): Promise<BatchOperationResult[]> {
     const { stage } = payload;
+
+    // RBAC: Only admins can perform bulk stage updates
+    if (userRole !== UserRole.ADMIN) {
+        throw AppError.forbidden('Only admins can perform bulk stage updates', 'ADMIN_ONLY');
+    }
 
     if (!stage) {
         throw AppError.badRequest('Stage is required', 'MISSING_STAGE');
@@ -281,6 +291,11 @@ async function batchArchive(
     userId: string,
     userRole?: UserRole
 ): Promise<BatchOperationResult[]> {
+    // RBAC: Only admins can perform bulk archive
+    if (userRole !== UserRole.ADMIN) {
+        throw AppError.forbidden('Only admins can perform bulk archive', 'ADMIN_ONLY');
+    }
+
     const results: BatchOperationResult[] = [];
 
     for (const projectId of projectIds) {
@@ -301,7 +316,7 @@ async function batchArchive(
 
             // Archive by setting stage to COMPLETED
             await prisma.project.update({
-                where: { id: projectId },
+                where: { id: projectId, tenantId },
                 data: {
                     stage: ProjectStage.COMPLETED,
                     completedAt: new Date(),

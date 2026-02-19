@@ -61,7 +61,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, isActive, onClic
 );
 
 export const Layout: React.FC = () => {
-  const { currentUser, setCurrentUser, users } = useApp();
+  const { currentUser, setCurrentUser, users, logout } = useApp();
   const { theme, toggleTheme } = useTheme();
   // const [currentView, setCurrentView] = useState<'dashboard' | 'overview' | 'team' | 'leaderboard' | 'completed' | 'activity'>('dashboard');
   const navigate = useNavigate();
@@ -246,9 +246,7 @@ export const Layout: React.FC = () => {
             variant="ghost"
             size="sm"
             onClick={() => {
-              setCurrentUser(null);
-              localStorage.removeItem('auth_token');
-              navigate('/login');
+              logout();
             }}
             fullWidth
             className="mt-2 text-slate-500 hover:text-red-600 hover:bg-red-50/50 dark:hover:bg-red-900/20"

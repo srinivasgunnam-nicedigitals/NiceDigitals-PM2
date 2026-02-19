@@ -242,7 +242,7 @@ export const resetPassword = async (req: Request, res: Response) => {
             // Update user password
             await tx.user.update({
                 where: { id: user.id },
-                data: { password: hashedPassword }
+                data: { password: hashedPassword, lastRevocationAt: new Date() }
             });
 
             // Mark token as used
@@ -313,7 +313,7 @@ export const changePassword = async (req: Request, res: Response) => {
             // Update password
             await tx.user.update({
                 where: { id: userId },
-                data: { password: hashedPassword }
+                data: { password: hashedPassword, lastRevocationAt: new Date() }
             });
 
             console.log(`[AUTH] Password changed successfully for user ${userId}`);
@@ -332,6 +332,33 @@ export const changePassword = async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('Change password error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+export const logout = async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+
+        // Revoke token generation by updating lastRevocationAt
+        if (userId) {
+            await prisma.user.update({
+                where: { id: userId },
+                data: { lastRevocationAt: new Date() }
+            });
+        }
+
+        // Clear the HttpOnly cookie
+        res.clearCookie('token', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax'
+        });
+
+        res.json({ message: 'Logged out' });
+
+    } catch (error: any) {
+        console.error('Logout error:', error);
         res.status(500).json({ error: 'Internal server error' });
     }
 };

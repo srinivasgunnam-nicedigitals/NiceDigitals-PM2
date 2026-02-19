@@ -22,6 +22,7 @@ interface AppContextType {
   addUser: (u: User) => void;
   updateUser: (userId: string, updates: Partial<User>) => void;
   deleteUser: (userId: string) => void;
+  logout: () => void;
   addComment: (projectId: string, text: string) => void;
   archiveProject: (id: string) => void;
   unarchiveProject: (id: string) => void;
@@ -158,53 +159,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateProjectMutation = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: any }) =>
       backendApi.updateProject(id, updates),
-    onMutate: async ({ id, updates }) => {
-      // Cancel queries
-      await queryClient.cancelQueries({ queryKey: ['projects'] });
-      await queryClient.cancelQueries({ queryKey: ['project', id] });
-
-      // Snapshot previous values
-      // We need to be specific about the page we are on for the list update
-      const previousProjects = queryClient.getQueryData<{ data: Project[], meta: any }>(['projects', page]);
-      const previousProject = queryClient.getQueryData<Project>(['project', id]);
-
-      // Optimistically update list
-      if (previousProjects) {
-        queryClient.setQueryData<{ data: Project[], meta: any }>(['projects', page], (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            data: old.data.map((p) => {
-              if (p.id === id) {
-                const { newHistoryItem, ...actualUpdates } = updates;
-                return { ...p, ...actualUpdates };
-              }
-              return p;
-            })
-          };
-        });
-      }
-
-      // Optimistically update single project (Critical for Modal)
-      if (previousProject) {
-        queryClient.setQueryData<Project>(['project', id], (old) => {
-          if (!old) return old;
-          const { newHistoryItem, ...actualUpdates } = updates;
-          return { ...old, ...actualUpdates };
-        });
-      }
-
-      // Return context
-      return { previousProjects, previousProject };
-    },
-    onError: (err, newTodo, context) => {
-      if (context?.previousProjects) {
-        queryClient.setQueryData(['projects', page], context.previousProjects);
-      }
-      if (context?.previousProject) {
-        queryClient.setQueryData(['project', newTodo.id], context.previousProject);
-      }
-    },
     onSettled: (data, error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       if (variables?.id) {
@@ -260,6 +214,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // addScoreMutation removed - scores are now created server-side only
   // via advanceProjectStage and recordQAFeedback endpoints
+
+  const logout = useCallback(async () => {
+    try {
+      await backendApi.logout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    } finally {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+      setCurrentUser(null);
+      window.location.href = '/login';
+    }
+  }, []);
 
   // --- CONTEXT IMPLEMENTATION (Adapting to Mutations) ---
 
@@ -674,7 +640,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <>
       <AppContext.Provider value={{
         currentUser, users, projects, scores, clients, isLoading, setCurrentUser,
-        addProject, updateProject, addUser, updateUser, deleteUser, addComment, archiveProject, unarchiveProject, advanceStage, recordQAFeedback, regressToDev, getDevRankings,
+        addProject, updateProject, addUser, updateUser, deleteUser, logout, addComment, archiveProject, unarchiveProject, advanceStage, recordQAFeedback, regressToDev, getDevRankings,
         bulkUpdateStage, bulkAssignUser, bulkArchiveProjects, bulkDeleteProjects, deleteProject,
         notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications,
         page, setPage, paginationMeta

@@ -495,6 +495,7 @@ const RoleSpecificDashboard = () => {
           onBulkArchive={handleBulkArchive}
           onBulkDelete={handleBulkDelete}
           users={users}
+          currentUser={currentUser}
         />
       )}
 

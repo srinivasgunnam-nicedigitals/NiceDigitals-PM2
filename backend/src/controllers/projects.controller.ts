@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../config/db';
-import { ProjectStage, Prisma } from '@prisma/client';
+import { ProjectStage, Prisma, UserRole } from '@prisma/client';
 
 
 import * as projectsService from '../services/projects.service';
@@ -399,7 +399,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                 const result = await tx.$executeRaw`
                     UPDATE "Project"
                     SET ${Prisma.raw(updateFields.join(', '))}
-                    WHERE id = ${id}::uuid AND version = ${expectedVersion}
+                    WHERE id = ${id}::uuid AND "tenantId" = ${tenantId} AND version = ${expectedVersion}
                 `;
 
                 // Verify exactly 1 row affected (version matched)
@@ -509,7 +509,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
             const result = await tx.$executeRaw`
                 UPDATE "Project"
                 SET ${Prisma.raw(updateFields.join(', '))}
-                WHERE id = ${id}::uuid AND version = ${expectedVersion}
+                WHERE id = ${id}::uuid AND "tenantId" = ${tenantId} AND version = ${expectedVersion}
             `;
 
             // Verify exactly 1 row affected (version matched)
@@ -672,6 +672,25 @@ export const advanceStage = async (req: Request, res: Response, next: NextFuncti
         }
         // nextStage and version checks handled by Zod
 
+        // RBAC: Only admins or users assigned to the project can advance stage
+        const projectForRbac = await prisma.project.findFirst({
+            where: { id, tenantId },
+            select: { assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true }
+        });
+
+        if (!projectForRbac) {
+            throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
+        }
+
+        const isAdmin = req.user?.role === UserRole.ADMIN;
+        const isAssigned =
+            projectForRbac.assignedDesignerId === userId ||
+            projectForRbac.assignedDevManagerId === userId ||
+            projectForRbac.assignedQAId === userId;
+
+        if (!isAdmin && !isAssigned) {
+            throw AppError.forbidden('You are not assigned to this project', 'NOT_ASSIGNED');
+        }
 
         const updatedProject = await projectsService.advanceProjectStage({
             projectId: id,
@@ -699,6 +718,25 @@ export const recordQAFeedback = async (req: Request, res: Response, next: NextFu
         }
         // passed and version checks handled by Zod
 
+        // RBAC: Only admins or users assigned to the project can submit QA feedback
+        const projectForRbac = await prisma.project.findFirst({
+            where: { id, tenantId },
+            select: { assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true }
+        });
+
+        if (!projectForRbac) {
+            throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
+        }
+
+        const isAdmin = req.user?.role === UserRole.ADMIN;
+        const isAssigned =
+            projectForRbac.assignedDesignerId === userId ||
+            projectForRbac.assignedDevManagerId === userId ||
+            projectForRbac.assignedQAId === userId;
+
+        if (!isAdmin && !isAssigned) {
+            throw AppError.forbidden('You are not assigned to this project', 'NOT_ASSIGNED');
+        }
 
         const updatedProject = await projectsService.recordQAFeedback({
             projectId: id,
