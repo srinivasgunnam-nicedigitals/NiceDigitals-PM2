@@ -99,8 +99,8 @@ if (process.env.REDIS_URL) {
     logger.info('Using Redis for Rate Limiting');
 } else {
     if (process.env.NODE_ENV === 'production') {
-        logger.error('REDIS_URL is required in production for rate limiting. Refusing to start.');
-        process.exit(1);
+        // CHANGED: Allow fallback for testing/demos/single-instance deployments
+        logger.warn('REDIS_URL not set in production. Falling back to in-memory rate limiting. Note: Rate limits will not be shared across multiple instances.');
     }
     logger.warn('Redis not configured. Using in-memory rate limiting.');
 }
