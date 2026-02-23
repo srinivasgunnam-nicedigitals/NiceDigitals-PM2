@@ -12,7 +12,7 @@ interface TeamTabProps {
 
 export const TeamTab: React.FC<TeamTabProps> = ({ project }) => {
     const { currentUser, users } = useApp();
-    const { showConfirm, showPrompt } = useModal();
+    const { showConfirm, showPrompt, showAlert } = useModal();
     const queryClient = useQueryClient();
     const [editingMember, setEditingMember] = useState<ProjectTeamMember | null>(null);
     const [showAddForm, setShowAddForm] = useState<{ leadRole: TeamLeadRole } | null>(null);
@@ -26,11 +26,13 @@ export const TeamTab: React.FC<TeamTabProps> = ({ project }) => {
     const isAdmin = currentUser?.role === UserRole.ADMIN;
     const isDesignLead = currentUser?.id === project.assignedDesignerId;
     const isDevLead = currentUser?.id === project.assignedDevManagerId;
+    const isQALead = currentUser?.id === project.assignedQAId;
 
     const canManageTeam = (leadRole: TeamLeadRole) => {
         if (isAdmin) return true;
         if (leadRole === TeamLeadRole.DESIGN && isDesignLead) return true;
         if (leadRole === TeamLeadRole.DEV && isDevLead) return true;
+        if (leadRole === TeamLeadRole.QA && isQALead) return true;
         return false;
     };
 
@@ -61,6 +63,8 @@ export const TeamTab: React.FC<TeamTabProps> = ({ project }) => {
         } catch (error: any) {
             // 409 conflicts automatically handled by axios interceptor
             console.error('Failed to add team member:', error);
+            const msg = error.response?.data?.error || error.message || 'Failed to add team member';
+            showAlert({ title: 'Error', message: msg, variant: 'error' });
         }
     };
 
@@ -88,6 +92,8 @@ export const TeamTab: React.FC<TeamTabProps> = ({ project }) => {
         } catch (error: any) {
             // 409 conflicts automatically handled by axios interceptor
             console.error('Failed to update team member:', error);
+            const msg = error.response?.data?.error || error.message || 'Failed to update team member';
+            showAlert({ title: 'Error', message: msg, variant: 'error' });
         }
     };
 
@@ -120,11 +126,14 @@ export const TeamTab: React.FC<TeamTabProps> = ({ project }) => {
         } catch (error: any) {
             // 409 conflicts automatically handled by axios interceptor
             console.error('Failed to delete team member:', error);
+            const msg = error.response?.data?.error || error.message || 'Failed to delete team member';
+            showAlert({ title: 'Error', message: msg, variant: 'error' });
         }
     };
 
     const designTeam = teamMembers.filter(m => m.leadRole === TeamLeadRole.DESIGN);
     const devTeam = teamMembers.filter(m => m.leadRole === TeamLeadRole.DEV);
+    const qaTeam = teamMembers.filter(m => m.leadRole === TeamLeadRole.QA);
 
     const designLead = users.find(u => u.id === project.assignedDesignerId);
     const devLead = users.find(u => u.id === project.assignedDevManagerId);
@@ -208,8 +217,8 @@ export const TeamTab: React.FC<TeamTabProps> = ({ project }) => {
                 )}
             </div>
 
-            {/* QA Team Section (Read-only) */}
-            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 opacity-60">
+            {/* QA Team Section */}
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6">
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h3 className="text-[14px] font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
@@ -218,8 +227,32 @@ export const TeamTab: React.FC<TeamTabProps> = ({ project }) => {
                         </h3>
                         <p className="text-[11px] text-slate-500 mt-1">Lead: {qaLead?.name || 'Unassigned'}</p>
                     </div>
+                    {canManageTeam(TeamLeadRole.QA) && (
+                        <button
+                            onClick={() => setShowAddForm({ leadRole: TeamLeadRole.QA })}
+                            className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[11px] font-bold uppercase tracking-wider rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-all"
+                        >
+                            <UserPlus size={14} />
+                            Add Member
+                        </button>
+                    )}
                 </div>
-                <div className="text-center py-8 text-slate-400 text-[12px]">QA team members not supported in this version</div>
+
+                {qaTeam.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 text-[12px]">No team members yet</div>
+                ) : (
+                    <div className="space-y-3">
+                        {qaTeam.map(member => (
+                            <TeamMemberCard
+                                key={member.id}
+                                member={member}
+                                canManage={canManageTeam(TeamLeadRole.QA)}
+                                onEdit={() => setEditingMember(member)}
+                                onDelete={() => handleDeleteMember(member)}
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Add/Edit Form Modal */}
@@ -301,7 +334,7 @@ const TeamMemberForm: React.FC<{
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
             <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-2xl p-6">
                 <h3 className="text-[16px] font-bold text-slate-900 dark:text-white mb-4">
-                    {member ? 'Edit Team Member' : `Add ${leadRole === TeamLeadRole.DESIGN ? 'Design' : 'Dev'} Team Member`}
+                    {member ? 'Edit Team Member' : `Add ${leadRole === TeamLeadRole.DESIGN ? 'Design' : leadRole === TeamLeadRole.DEV ? 'Dev' : 'QA'} Team Member`}
                 </h3>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>

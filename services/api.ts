@@ -2,9 +2,11 @@ import axios from 'axios';
 import { Project, User, ScoreEntry, Comment, HistoryItem, ProjectTeamMember, TeamLeadRole } from '../types';
 
 const getBaseURL = () => {
-    const rawUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-    // If it's a production URL (contains render.com) and doesn't end with /api, append it
-    if (rawUrl.includes('render.com') && !rawUrl.toLowerCase().endsWith('/api') && !rawUrl.toLowerCase().endsWith('/api/')) {
+    const rawUrl = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+    const isLocalhost = rawUrl.includes('localhost') || rawUrl.includes('127.0.0.1');
+
+    // If it's a production URL and doesn't end with /api, append it automatically
+    if (!isLocalhost && !rawUrl.toLowerCase().endsWith('/api') && !rawUrl.toLowerCase().endsWith('/api/')) {
         return rawUrl.replace(/\/$/, '') + '/api/';
     }
     // Otherwise just ensure it ends with a single slash

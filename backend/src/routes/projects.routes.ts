@@ -41,6 +41,7 @@ router.patch('/:id/change-deadline', phase2aController.changeDeadline);
 router.patch('/:id/reassign-lead', phase2aController.reassignLead);
 
 // Phase 2A: Team member operations
+router.get('/:id/team-members', phase2aController.getTeamMembers);
 router.post('/:id/team-members', phase2aController.addTeamMember);
 router.patch('/:id/team-members/:memberId', phase2aController.updateTeamMember);
 router.delete('/:id/team-members/:memberId', phase2aController.deleteTeamMember);

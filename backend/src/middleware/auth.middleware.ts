@@ -17,9 +17,10 @@ declare global {
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
+
 if (!JWT_SECRET) {
-    console.error("FATAL: JWT_SECRET is not defined.");
-    // In strict production, we might process.exit(1), but for now logging error is sufficient as verify will fail.
+    // This should never happen due to startup validation in index.ts
+    throw new Error("FATAL: JWT_SECRET is not defined.");
 }
 
 import { prisma } from '../config/db';

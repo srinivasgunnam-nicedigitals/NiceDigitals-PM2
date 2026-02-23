@@ -381,7 +381,12 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                 for (const [key, value] of Object.entries(sanitizedUpdates)) {
                     if (value !== undefined) {
                         updateFields.push(`"${key}" = $${paramIndex}`);
-                        updateValues.push(value);
+                        // Handle JSON fields for Checklist updates explicitly
+                        if (['designChecklist', 'devChecklist', 'qaChecklist', 'finalChecklist'].includes(key)) {
+                            updateValues.push(JSON.stringify(value));
+                        } else {
+                            updateValues.push(value);
+                        }
                         paramIndex++;
                     }
                 }

@@ -166,6 +166,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         queryClient.invalidateQueries({ queryKey: ['project-history', variables.id] });
       }
     },
+    onError: (error: any) => {
+      if (error.response?.status !== 409) { // Version conflicts handled globally
+        const msg = error.response?.data?.error || error.message || 'Failed to update project';
+        showAlert({ title: 'Error', message: msg, variant: 'error' });
+      }
+    }
   });
 
   const deleteProjectMutation = useMutation({

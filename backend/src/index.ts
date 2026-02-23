@@ -14,6 +14,9 @@ import { prisma } from './config/db';
 
 dotenv.config();
 
+// Default to development if not set, preventing crashes in local environments
+process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+
 const app = express();
 
 // Required for express-rate-limit on Render/Proxies
@@ -39,10 +42,10 @@ app.use(helmet({
         action: 'deny' // Prevent clickjacking
     }
 }));
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 // CRITICAL: Validate required environment variables at startup
-const requiredEnvVars = ['JWT_SECRET', 'DATABASE_URL'];
+const requiredEnvVars = ['JWT_SECRET', 'DATABASE_URL', 'NODE_ENV', 'FRONTEND_URL'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
@@ -52,15 +55,19 @@ if (missingVars.length > 0) {
 
 logger.info('Environment validation passed');
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
 // Allow both common dev ports for flexibility
 const allowedOrigins = [
     FRONTEND_URL,
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'https://nicedigitalspma.vercel.app'  // Production frontend
+    // Add other allowed origins if needed, but in production, FRONTEND_URL is the source of truth
 ];
+
+// In non-production, allow localhost for convenience if FRONTEND_URL matches
+if (process.env.NODE_ENV !== 'production') {
+    allowedOrigins.push('http://localhost:3000');
+    allowedOrigins.push('http://localhost:5173');
+}
 
 import cookieParser from 'cookie-parser';
 
@@ -69,9 +76,14 @@ app.use(cors({
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        if (origin && allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
+            // START DEBUGGING BLOCK
+            if (process.env.NODE_ENV !== 'production') {
+                console.warn(`Blocked by CORS: ${origin}`);
+            }
+            // END DEBUGGING BLOCK
             callback(new Error('Not allowed by CORS'));
         }
     },

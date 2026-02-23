@@ -11,7 +11,7 @@ import { Login } from './pages/Login';
 
 const AppContent = () => {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/nd_pma2">
       <AppRoutes />
     </BrowserRouter>
   );

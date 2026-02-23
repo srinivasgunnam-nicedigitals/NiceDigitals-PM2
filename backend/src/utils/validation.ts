@@ -120,7 +120,7 @@ export const reassignLeadSchema = z.object({
 
 // Phase 2A: Team member operations
 export const addTeamMemberSchema = z.object({
-    leadRole: z.enum(['DESIGN', 'DEV']),
+    leadRole: z.enum(['DESIGN', 'DEV', 'QA']),
     name: z.string().min(1).max(100),
     roleTitle: z.string().min(1).max(100),
     notes: z.string().max(500).optional(),

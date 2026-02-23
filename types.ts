@@ -108,7 +108,8 @@ export interface DevPerformance {
 // Phase 2A: Team member types
 export enum TeamLeadRole {
   DESIGN = 'DESIGN',
-  DEV = 'DEV'
+  DEV = 'DEV',
+  QA = 'QA'
 }
 
 export interface ProjectTeamMember {

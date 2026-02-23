@@ -555,3 +555,30 @@ export const deleteTeamMember = async (req: Request, res: Response, next: NextFu
         next(error);
     }
 };
+
+/**
+ * GET /api/projects/:id/team-members
+ * 
+ * Get team members for a project (Admin OR assigned lead for that role)
+ */
+export const getTeamMembers = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id: projectId } = req.params;
+        const tenantId = req.user?.tenantId;
+
+        // Fetch team members for the project
+        const members = await prisma.projectTeamMember.findMany({
+            where: {
+                projectId,
+                tenantId
+            },
+            orderBy: {
+                createdAt: 'asc'
+            }
+        });
+
+        res.json(members);
+    } catch (error) {
+        next(error);
+    }
+};
