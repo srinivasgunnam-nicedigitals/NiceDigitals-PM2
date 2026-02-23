@@ -318,7 +318,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
         if (userRole === 'ADMIN') {
             // Strict Schema: Admin Schema
             const updates = adminUpdateProjectSchema.parse(req.body);
-            const { newHistoryItem, ...allowedUpdates } = updates;
+            const { newHistoryItem, version: _versionDrop, ...allowedUpdates } = updates;
             const sanitizedUpdates = {
                 ...allowedUpdates,
                 ...(allowedUpdates.scope !== undefined
@@ -470,7 +470,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
         // 2. Strict Schema: Member Schema
         // This will THROW if frontend sends 'scope', 'name', 'priority', or 'assignments'
         const updates = memberUpdateProjectSchema.parse(req.body);
-        const { newHistoryItem, ...allowedUpdates } = updates;
+        const { newHistoryItem, version: _versionDrop, ...allowedUpdates } = updates;
 
         // 3. Member History (Usually Checklist updates)
         let historyCreate = undefined;

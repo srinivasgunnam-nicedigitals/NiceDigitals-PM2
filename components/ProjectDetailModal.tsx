@@ -260,13 +260,13 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
   const handleSaveScope = () => {
     setIsSaving(true);
-    updateProject(project.id, { scope: sanitizeScopeHtml(editScope) });
+    updateProject(project.id, { scope: sanitizeScopeHtml(editScope), version: project.version });
     setTimeout(() => { setIsSaving(false); }, 1000);
   };
 
   const handleAssignment = (role: UserRole, userId: string) => {
     if (currentUser?.role !== UserRole.ADMIN) return;
-    const update: any = {};
+    const update: any = { version: project.version };
     if (role === UserRole.DESIGNER) update.assignedDesignerId = userId;
     if (role === UserRole.DEV_MANAGER) update.assignedDevManagerId = userId;
     if (role === UserRole.QA_ENGINEER) update.assignedQAId = userId;
@@ -292,7 +292,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     if (!canModifyChecklist) return;
     const { items, key } = getChecklistForStage();
     const newItems = items.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i);
-    updateProject(project.id, { [key]: newItems });
+    updateProject(project.id, { [key]: newItems, version: project.version });
   };
 
   // Recalculate on every render to ensure reactivity

@@ -57,7 +57,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick }) =>
     const userId = e.target.value;
     if (currentUser?.role === UserRole.ADMIN) {
       // Convert empty string to null to avoid foreign key constraint violations
-      updateProject(project.id, { assignedDesignerId: userId === '' ? null : userId });
+      updateProject(project.id, { assignedDesignerId: userId === '' ? null : userId, version: project.version });
     }
   };
 
