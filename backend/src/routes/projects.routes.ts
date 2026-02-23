@@ -29,6 +29,7 @@ router.delete('/:id', requireAdmin, projectsController.deleteProject);
 router.get('/:id/history', projectsController.getProjectHistory);
 router.get('/:id/comments', projectsController.getProjectComments);
 router.post('/:id/comments', projectsController.addComment);
+router.delete('/:id/comments/:commentId', projectsController.deleteComment);
 
 // Secure stage advancement (server calculates scores)
 router.post('/:id/advance-stage', projectsController.advanceStage);

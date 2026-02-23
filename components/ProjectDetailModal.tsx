@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { backendApi } from '../services/api';
 import DOMPurify from 'dompurify';
 
@@ -33,10 +33,12 @@ const sanitizeScopeHtml = (html: string | undefined | null): string => {
 const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClose: () => void }) => {
   const { addComment, users, currentUser } = useApp();
   const [commentText, setCommentText] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const { data: commentsResponse, isLoading } = useQuery({
     queryKey: ['project-comments', project.id],
-    queryFn: () => backendApi.getProjectComments(project.id, 1, 100) // Access first 100 comments
+    queryFn: () => backendApi.getProjectComments(project.id, 1, 100)
   });
   const comments = commentsResponse?.data || [];
 
@@ -45,6 +47,19 @@ const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClos
     if (!commentText.trim()) return;
     addComment(project.id, commentText);
     setCommentText('');
+  };
+
+  const handleDelete = async (commentId: string) => {
+    if (deletingId) return; // prevent double-click
+    setDeletingId(commentId);
+    try {
+      await backendApi.deleteComment(project.id, commentId);
+      await queryClient.invalidateQueries({ queryKey: ['project-comments', project.id] });
+    } catch (err: any) {
+      // Silently ignore — backend already rejects non-owners with 403
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -68,12 +83,22 @@ const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClos
               const author = users.find(u => u.id === comment.userId);
               const isMe = comment.userId === currentUser?.id;
               return (
-                <div key={comment.id} className="flex flex-col gap-1.5 animate-saas-fade">
+                <div key={comment.id} className="group flex flex-col gap-1.5 animate-saas-fade">
                   <div className="flex items-center gap-2">
-
                     <img src={author?.avatar} className="w-5 h-5 rounded" alt="" />
                     <span className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{author?.name}</span>
                     <span className="text-[10px] font-medium text-slate-400">{format(parseISO(comment.timestamp), 'h:mm a')}</span>
+                    {/* Delete button: only visible on hover, only for own messages */}
+                    {isMe && (
+                      <button
+                        onClick={() => handleDelete(comment.id)}
+                        disabled={deletingId === comment.id}
+                        className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-300 hover:text-red-500 dark:hover:text-red-400 rounded disabled:opacity-30"
+                        title="Delete message"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </div>
                   <div className={`px-4 py-2.5 rounded-lg text-[13px] font-medium leading-relaxed border ${isMe ? 'bg-white dark:bg-slate-800 border-indigo-100 dark:border-indigo-900/50 text-slate-800 dark:text-slate-200 shadow-sm' : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                     }`}>
@@ -93,6 +118,12 @@ const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClos
             className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none focus:bg-white dark:focus:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 transition-all text-[13px] font-medium resize-none shadow-inner"
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (commentText.trim()) handlePost(e as any);
+              }
+            }}
           />
           <button
             type="submit"
@@ -133,6 +164,9 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
   // Phase 2A modal states
   const [showDeadlineModal, setShowDeadlineModal] = useState(false);
   const [showReassignModal, setShowReassignModal] = useState(false);
+
+  // Manual Add Task state
+  const [newTaskText, setNewTaskText] = useState('');
 
   useEffect(() => {
     const sanitized = sanitizeScopeHtml(project.scope);
@@ -295,6 +329,51 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     updateProject(project.id, { [key]: newItems, version: project.version });
   };
 
+  const handleAddTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (currentUser?.role !== UserRole.ADMIN || !newTaskText.trim()) return;
+
+    const { items, key } = getChecklistForStage();
+    const newTask = {
+      id: `custom-task-${Date.now()}`,
+      label: newTaskText.trim(),
+      completed: false
+    };
+
+    const newItems = [...items, newTask];
+    updateProject(project.id, { [key]: newItems, version: project.version });
+    setNewTaskText('');
+  };
+
+  const handleDeleteTask = (e: React.MouseEvent, itemId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (currentUser?.role !== UserRole.ADMIN) return;
+
+    const { items, key } = getChecklistForStage();
+    const newItems = items.filter(i => i.id !== itemId);
+    updateProject(project.id, { [key]: newItems, version: project.version });
+  };
+
+  const handleDeleteAllTasks = async () => {
+    if (currentUser?.role !== UserRole.ADMIN) return;
+
+    const { items, key } = getChecklistForStage();
+    if (items.length === 0) return;
+
+    const confirmed = await showConfirm({
+      title: 'Delete All Tasks',
+      message: 'Are you sure you want to delete ALL tasks in this phase checklist? This cannot be undone.',
+      confirmText: 'Delete All Tasks',
+      cancelText: 'Cancel',
+      variant: 'error'
+    });
+
+    if (confirmed) {
+      updateProject(project.id, { [key]: [], version: project.version });
+    }
+  };
+
   // Recalculate on every render to ensure reactivity
   const { items, key } = getChecklistForStage();
   const isChecklistComplete = items.length > 0 && items.every(i => i.completed);
@@ -389,7 +468,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                 </button>
               )}
 
-              {project.stage !== ProjectStage.COMPLETED && (
+              {currentUser?.role === UserRole.ADMIN && project.stage !== ProjectStage.COMPLETED && (
                 <button
                   onClick={async () => {
                     const confirmed = await showConfirm({
@@ -436,7 +515,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
           <div className="flex-1 overflow-y-auto p-8">
             {activeTab === 'details' && (
               <div className="max-w-5xl mx-auto grid grid-cols-12 gap-8">
-                <div className="col-span-8 space-y-6">
+                <div className="col-span-12 space-y-6">
                   <div className="bg-[#F9FAFB] dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden flex flex-col min-h-[500px]">
                     <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-between relative">
                       <div className="flex items-center gap-1 text-slate-400">
@@ -488,67 +567,81 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                     `}</style>
                   </div>
                 </div>
-
-                <div className="col-span-4 space-y-6">
-                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-xl shadow-sm">
-                    <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Operations Lead</h4>
-                    <div className="space-y-5">
-                      {[
-                        { role: UserRole.DESIGNER, label: 'Design Lead', assignedId: project.assignedDesignerId },
-                        { role: UserRole.DEV_MANAGER, label: 'Dev Lead', assignedId: project.assignedDevManagerId },
-                        { role: UserRole.QA_ENGINEER, label: 'QA Lead', assignedId: project.assignedQAId }
-                      ].map(assign => {
-                        const user = users.find(u => u.id === assign.assignedId);
-                        return (
-                          <div key={assign.role} className="flex flex-col gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{assign.label}</span>
-                            <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                              <img src={user?.avatar || `https://picsum.photos/seed/${assign.role}/32/32`} className={`w-6 h-6 rounded-md ${!user && 'opacity-20'}`} alt="" />
-                              <div className="flex-1">
-                                {currentUser?.role === UserRole.ADMIN ? (
-                                  <select value={assign.assignedId || ""} onChange={(e) => handleAssignment(assign.role, e.target.value)} className="w-full text-[12px] font-bold bg-transparent border-none p-0 focus:ring-0 cursor-pointer text-slate-900 dark:text-slate-100 dark:bg-slate-900">
-                                    <option value="">Unassigned</option>
-                                    {users.filter(u => u.role === assign.role).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                                  </select>
-                                ) : <p className="text-[12px] font-bold text-slate-900 dark:text-slate-100">{user?.name || 'Awaiting selection'}</p>}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
 
             {activeTab === 'checklist' && (
               <div className="max-w-3xl mx-auto space-y-8 pb-12">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-6">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-6 group/header">
                   <h3 className="text-[14px] font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-3">
                     <span className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400"><CheckCircle size={16} /></span>
                     Phase Completion Checklist
                   </h3>
-                  <div className="flex flex-col items-end">
-                    <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{items.filter(i => i.completed).length} / {items.length}</span>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-1">Verified Actions</span>
+                  <div className="flex items-center gap-4">
+                    {currentUser?.role === UserRole.ADMIN && items.length > 0 && project.stage !== ProjectStage.UPCOMING && (
+                      <button
+                        onClick={handleDeleteAllTasks}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all rounded-lg"
+                        title="Delete All Tasks"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                    <div className="flex flex-col items-end">
+                      <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{items.filter(i => i.completed).length} / {items.length}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-1">Verified Actions</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  {items.map((item, idx) => (
-                    <label key={item.id} className={`flex items-center gap-4 p-4 rounded-xl border transition-all cursor-pointer group ${item.completed ? 'bg-slate-50 dark:bg-slate-800/50 border-transparent' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
-                      <input
-                        type="checkbox"
-                        checked={item.completed}
-                        disabled={!canModifyChecklist}
-                        onChange={() => toggleChecklistItem(item.id)}
-                        className="w-5 h-5 rounded border-2 border-slate-400 dark:border-slate-500 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 bg-transparent"
-                      />
-                      <span className={`text-[14px] font-medium leading-relaxed ${item.completed ? 'text-slate-500 dark:text-slate-500 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{item.label}</span>
-                    </label>
-                  ))}
-                </div>
+                {project.stage !== ProjectStage.UPCOMING && (
+                  <>
+                    <div className="space-y-2">
+                      {items.map((item, idx) => (
+                        <div key={item.id} className={`flex items-center gap-4 p-4 rounded-xl border transition-all group ${item.completed ? 'bg-slate-50 dark:bg-slate-800/50 border-transparent' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
+                          <label className="flex items-center gap-4 cursor-pointer flex-1">
+                            <input
+                              type="checkbox"
+                              checked={item.completed}
+                              disabled={!canModifyChecklist}
+                              onChange={() => toggleChecklistItem(item.id)}
+                              className="w-5 h-5 rounded border-2 border-slate-400 dark:border-slate-500 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 bg-transparent"
+                            />
+                            <span className={`text-[14px] font-medium leading-relaxed ${item.completed ? 'text-slate-500 dark:text-slate-500 line-through' : 'text-slate-700 dark:text-slate-200'}`}>{item.label}</span>
+                          </label>
+                          {currentUser?.role === UserRole.ADMIN && (
+                            <button
+                              onClick={(e) => handleDeleteTask(e, item.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-300 hover:text-red-500 transition-all rounded"
+                              title="Delete task"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {currentUser?.role === UserRole.ADMIN && (
+                      <form onSubmit={handleAddTask} className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Add custom task..."
+                          value={newTaskText}
+                          onChange={(e) => setNewTaskText(e.target.value)}
+                          className="flex-1 px-4 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg text-[14px] text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!newTaskText.trim()}
+                          className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 text-white rounded-lg hover:bg-slate-800 dark:hover:bg-indigo-700 disabled:opacity-50 transition-colors text-[13px] font-bold"
+                        >
+                          Add Task
+                        </button>
+                      </form>
+                    )}
+                  </>
+                )}
 
                 <div className="pt-8 space-y-4">
                   {/* QA Rejection Button - Always available during QA stage */}
@@ -572,8 +665,54 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                     </button>
                   )}
 
-                  {/* Advancement Buttons - Only when checklist is complete */}
-                  {isChecklistComplete ? (
+                  {/* Advancement Buttons */}
+                  {project.stage === ProjectStage.UPCOMING ? (
+                    // Start Project Gate
+                    <div className="space-y-6">
+                      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-xl shadow-sm">
+                        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Operations Lead</h4>
+                        <div className="space-y-5">
+                          {[
+                            { role: UserRole.DESIGNER, label: 'Design Lead', assignedId: project.assignedDesignerId },
+                            { role: UserRole.DEV_MANAGER, label: 'Dev Lead', assignedId: project.assignedDevManagerId },
+                            { role: UserRole.QA_ENGINEER, label: 'QA Lead', assignedId: project.assignedQAId }
+                          ].map(assign => {
+                            const user = users.find(u => u.id === assign.assignedId);
+                            return (
+                              <div key={assign.role} className="flex flex-col gap-2">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{assign.label}</span>
+                                <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                                  <img src={user?.avatar || `https://picsum.photos/seed/${assign.role}/32/32`} className={`w-6 h-6 rounded-md ${!user && 'opacity-20'}`} alt="" />
+                                  <div className="flex-1">
+                                    {currentUser?.role === UserRole.ADMIN ? (
+                                      <select value={assign.assignedId || ""} onChange={(e) => handleAssignment(assign.role, e.target.value)} className="w-full text-[12px] font-bold bg-transparent border-none p-0 focus:ring-0 cursor-pointer text-slate-900 dark:text-slate-100 dark:bg-slate-900">
+                                        <option value="">Unassigned</option>
+                                        {users.filter(u => u.role === assign.role).map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                                      </select>
+                                    ) : <p className="text-[12px] font-bold text-slate-900 dark:text-slate-100">{user?.name || 'Awaiting selection'}</p>}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {project.assignedDesignerId && project.assignedDevManagerId && project.assignedQAId ? (
+                        <button
+                          onClick={() => advanceStage(project.id, ProjectStage.DESIGN, currentUser!.id)}
+                          className="w-full py-4 bg-indigo-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
+                        >
+                          Start Project <ChevronRight size={18} />
+                        </button>
+                      ) : (
+                        <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center gap-3 text-slate-400 grayscale">
+                          <Clock size={16} />
+                          <span className="text-[12px] font-bold uppercase tracking-widest">Assign all leads to start project</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : isChecklistComplete ? (
                     project.stage === ProjectStage.QA ? (
                       <div className="flex gap-4">
                         <button
@@ -654,19 +793,21 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     <>
       {createPortal(modalContent, document.body)}
 
-      {/* Phase 2A Modals */}
-      {showDeadlineModal && (
+      {/* Phase 2A Modals — must also be portaled to document.body to render above everything */}
+      {showDeadlineModal && createPortal(
         <ChangeDeadlineModal
           project={project}
           onClose={() => setShowDeadlineModal(false)}
-        />
+        />,
+        document.body
       )}
-      {showReassignModal && (
+      {showReassignModal && createPortal(
         <ReassignLeadModal
           project={project}
           users={users}
           onClose={() => setShowReassignModal(false)}
-        />
+        />,
+        document.body
       )}
     </>
   );

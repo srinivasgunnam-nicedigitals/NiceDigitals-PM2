@@ -234,84 +234,117 @@ const KanbanColumn = ({ stage, projects, onProjectClick, onAddProject }: KanbanC
         )}
       </div>
       <div className="flex-1 space-y-3 bg-slate-100/50 dark:bg-slate-800/40 p-2 rounded-xl border border-slate-200/40 dark:border-slate-700/40 min-h-[400px]">
-        {projects.map(project => (
-          <div
-            key={project.id}
-            onClick={() => onProjectClick(project)}
-            className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm hover:border-indigo-500 dark:hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer group"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${PRIORITY_CONFIG[project.priority].color}`}>
-                {project.priority}
-              </span>
-              {project.isDelayed && <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />}
-            </div>
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[13px] font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate flex-1 min-w-0">{project.name}</h4>
-              {project.stage !== ProjectStage.COMPLETED && (
-                <>
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      const confirmed = await showConfirm({
-                        title: 'Archive Project',
-                        message: 'Are you sure you want to archive this project? It will be moved to the archive.',
-                        variant: 'warning',
-                        confirmText: 'Archive',
-                        cancelText: 'Cancel'
-                      });
-                      if (confirmed) {
-                        archiveProject(project.id);
-                      }
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all ml-2"
-                    title="Archive Project"
-                  >
-                    <Archive size={14} />
-                  </button>
-                  {currentUser?.role === UserRole.ADMIN && (
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        const confirmation = await showPrompt({
-                          title: 'Delete Project',
-                          message: "To permanently delete this project, type 'DELETE':",
-                          placeholder: 'DELETE',
-                          confirmText: 'Delete',
-                          cancelText: 'Cancel',
-                          validate: (value) => {
-                            if (value !== 'DELETE') {
-                              return 'You must type DELETE exactly to confirm';
-                            }
-                            return true;
-                          }
-                        });
-                        if (confirmation) {
-                          await deleteProject(project.id, confirmation);
-                        }
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all ml-1"
-                      title="Delete Project"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mb-3">{project.clientName}</p>
-            <div className="flex items-center justify-between">
-              <div className="flex -space-x-1.5">
-                {[project.assignedDesignerId, project.assignedDevManagerId].filter(Boolean).slice(0, 2).map(id => (
-                  <img key={id} src={`https://picsum.photos/seed/${id}/24/24`} className="w-5 h-5 rounded ring-2 ring-white dark:ring-slate-800" alt="" />
-                ))}
+        {projects.map(project => {
+          const allTasks = [
+            ...(project.designChecklist || []),
+            ...(project.devChecklist || []),
+            ...(project.qaChecklist || []),
+            ...(project.finalChecklist || [])
+          ];
+          const completed = allTasks.filter(i => i.completed).length;
+          const total = allTasks.length;
+          const progressPercentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+          return (
+            <div
+              key={project.id}
+              onClick={() => onProjectClick(project)}
+              className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm hover:border-indigo-500 dark:hover:border-indigo-400 hover:shadow-md transition-all cursor-pointer group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${PRIORITY_CONFIG[project.priority].color}`}>
+                  {project.priority}
+                </span>
+                {project.isDelayed && <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />}
               </div>
-              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
-                {format(parseISO(project.overallDeadline), 'MMM d')}
-              </span>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-[13px] font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate flex-1 min-w-0">{project.name}</h4>
+                {project.stage !== ProjectStage.COMPLETED && (
+                  <>
+                    {currentUser?.role === UserRole.ADMIN && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const confirmed = await showConfirm({
+                            title: 'Archive Project',
+                            message: 'Are you sure you want to archive this project? It will be moved to the archive.',
+                            variant: 'warning',
+                            confirmText: 'Archive',
+                            cancelText: 'Cancel'
+                          });
+                          if (confirmed) {
+                            archiveProject(project.id);
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all ml-2"
+                        title="Archive Project"
+                      >
+                        <Archive size={14} />
+                      </button>
+                    )}
+                    {currentUser?.role === UserRole.ADMIN && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const confirmation = await showPrompt({
+                            title: 'Delete Project',
+                            message: "To permanently delete this project, type 'DELETE':",
+                            placeholder: 'DELETE',
+                            confirmText: 'Delete',
+                            cancelText: 'Cancel',
+                            validate: (value) => {
+                              if (value !== 'DELETE') {
+                                return 'You must type DELETE exactly to confirm';
+                              }
+                              return true;
+                            }
+                          });
+                          if (confirmation) {
+                            await deleteProject(project.id, confirmation);
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all ml-1"
+                        title="Delete Project"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mb-4">{project.clientName}</p>
+
+              {/* Progress Bar & Count */}
+              <div className="flex flex-col gap-1.5 mb-4">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">Progress</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">
+                    {completed}/{total}
+                  </span>
+                </div>
+                <div className="w-full h-1 bg-slate-100 dark:bg-slate-700/50 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex -space-x-1.5">
+                  {[project.assignedDesignerId, project.assignedDevManagerId].filter(Boolean).slice(0, 2).map(id => (
+                    <img key={id} src={`https://picsum.photos/seed/${id}/24/24`} className="w-5 h-5 rounded ring-2 ring-white dark:ring-slate-800" alt="" />
+                  ))}
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                    {format(parseISO(project.overallDeadline), 'MMM d')}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {projects.length === 0 && (
           <EmptyState
             icon={FolderOpen}

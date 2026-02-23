@@ -25,6 +25,8 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
     formData.clientName.trim() !== '' &&
     formData.overallDeadline !== '';
 
+  const todayDateString = new Date().toISOString().split('T')[0];
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!isFormValid) return;
@@ -161,6 +163,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
                 <input
                   required
                   type="date"
+                  min={todayDateString}
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-slate-900 dark:text-slate-100"
                   value={formData.overallDeadline}
                   onChange={e => setFormData({ ...formData, overallDeadline: e.target.value })}
@@ -183,8 +186,8 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
               type="submit"
               disabled={!isFormValid}
               className={`w-full py-4 font-black rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 ${isFormValid
-                  ? 'bg-indigo-600 text-white shadow-indigo-100 dark:shadow-none hover:shadow-indigo-300 dark:hover:shadow-indigo-500/30'
-                  : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed shadow-none'
+                ? 'bg-indigo-600 text-white shadow-indigo-100 dark:shadow-none hover:shadow-indigo-300 dark:hover:shadow-indigo-500/30'
+                : 'bg-slate-200 dark:bg-slate-700 text-slate-400 cursor-not-allowed shadow-none'
                 }`}
             >
               Initiate Project

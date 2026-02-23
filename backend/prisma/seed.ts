@@ -19,14 +19,14 @@ async function main() {
 
   console.log('✅ Tenant created:', tenant.name);
 
-  // Create users
+  // Create users — IDs MUST be valid UUIDs (schema validates assignments as uuid)
   const hashedPassword = await bcrypt.hash('password123', 10);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@nicedigitals.com' },
     update: {},
     create: {
-      id: 'u-admin-001',
+      id: 'a0000001-0000-4000-8000-000000000001',
       name: 'Admin User',
       email: 'admin@nicedigitals.com',
       password: hashedPassword,
@@ -40,7 +40,7 @@ async function main() {
     where: { email: 'designer@nicedigitals.com' },
     update: {},
     create: {
-      id: 'u-designer-001',
+      id: 'a0000002-0000-4000-8000-000000000002',
       name: 'Jane Designer',
       email: 'designer@nicedigitals.com',
       password: hashedPassword,
@@ -54,7 +54,7 @@ async function main() {
     where: { email: 'dev@nicedigitals.com' },
     update: {},
     create: {
-      id: 'u-dev-001',
+      id: 'a0000003-0000-4000-8000-000000000003',
       name: 'John Developer',
       email: 'dev@nicedigitals.com',
       password: hashedPassword,
@@ -68,7 +68,7 @@ async function main() {
     where: { email: 'qa@nicedigitals.com' },
     update: {},
     create: {
-      id: 'u-qa-001',
+      id: 'a0000004-0000-4000-8000-000000000004',
       name: 'Sarah QA',
       email: 'qa@nicedigitals.com',
       password: hashedPassword,

@@ -51,7 +51,7 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
     // Verify project exists and belongs to tenant
     const project = await prisma.project.findFirst({
         where: { id: projectId, tenantId },
-        select: { id: true, stage: true, version: true, assignedDevManagerId: true, overallDeadline: true, qaFailCount: true, tenantId: true }
+        select: { id: true, stage: true, version: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, overallDeadline: true, qaFailCount: true, tenantId: true }
     });
 
     if (!project) {
@@ -71,6 +71,13 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
     const allowed = VALID_TRANSITIONS[project.stage] || [];
     if (!allowed.includes(nextStage)) {
         throw AppError.badRequest(`Invalid stage transition: Cannot move from ${project.stage} to ${nextStage}`, 'INVALID_TRANSITION');
+    }
+
+    // Gating Validation: UPCOMING -> DESIGN requires all leads assigned
+    if (project.stage === 'UPCOMING' && nextStage === 'DESIGN') {
+        if (!project.assignedDesignerId || !project.assignedDevManagerId || !project.assignedQAId) {
+            throw AppError.badRequest('Cannot start project: Design, Development, and QA leads must all be assigned first.', 'MISSING_ASSIGNMENTS');
+        }
     }
 
     // Create history entry

@@ -10,7 +10,7 @@ export const prisma = new PrismaClient({
             url: process.env.DATABASE_URL,
         },
     },
-    log: process.env.NODE_ENV === 'production' ? ['error', 'warn'] : ['query', 'error', 'warn'],
+    log: ['error', 'warn'],
 });
 
 // Diagnostic to verify connection on startup

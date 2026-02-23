@@ -53,7 +53,7 @@ if (missingVars.length > 0) {
     process.exit(1);
 }
 
-logger.info('Environment validation passed');
+// Env vars validated ✓
 
 const FRONTEND_URL = process.env.FRONTEND_URL;
 
@@ -79,11 +79,7 @@ app.use(cors({
         if (origin && allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
-            // START DEBUGGING BLOCK
-            if (process.env.NODE_ENV !== 'production') {
-                console.warn(`Blocked by CORS: ${origin}`);
-            }
-            // END DEBUGGING BLOCK
+            logger.warn(`CORS blocked: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
@@ -94,7 +90,6 @@ app.use(cors({
 
 app.use(cookieParser());
 
-// Rate Limiting
 // Rate Limiting
 import { rateLimit } from 'express-rate-limit';
 import RedisStore from 'rate-limit-redis';
@@ -111,10 +106,8 @@ if (process.env.REDIS_URL) {
     logger.info('Using Redis for Rate Limiting');
 } else {
     if (process.env.NODE_ENV === 'production') {
-        // CHANGED: Allow fallback for testing/demos/single-instance deployments
-        logger.warn('REDIS_URL not set in production. Falling back to in-memory rate limiting. Note: Rate limits will not be shared across multiple instances.');
+        logger.warn('REDIS_URL not set — using in-memory rate limiting (not shared across instances)');
     }
-    logger.warn('Redis not configured. Using in-memory rate limiting.');
 }
 
 const authLimiter = rateLimit({
@@ -141,22 +134,17 @@ app.use(express.json());
 // Request ID middleware (must be early in chain)
 app.use(requestIdMiddleware);
 
-// Structured request logging
+// Minimal request logger — one clean line per request
 app.use((req, res, next) => {
     const start = Date.now();
-
     res.on('finish', () => {
-        const duration = Date.now() - start;
-        logger.info({
-            requestId: (req as any).requestId,
-            method: req.method,
-            path: req.path,
-            statusCode: res.statusCode,
-            duration,
-            userAgent: req.headers['user-agent']
-        }, 'Request completed');
+        const ms = Date.now() - start;
+        const status = res.statusCode;
+        const line = `${status}  ${req.method} ${req.originalUrl}  ${ms}ms`;
+        if (status >= 500) logger.error(line);
+        else if (status >= 400) logger.warn(line);
+        else logger.info(line);
     });
-
     next();
 });
 

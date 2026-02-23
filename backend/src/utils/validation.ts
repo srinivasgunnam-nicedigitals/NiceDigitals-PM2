@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import { startOfDay } from 'date-fns';
+
+const dateNotPast = (val: string) => {
+    const today = startOfDay(new Date());
+    const inputDate = new Date(val);
+    return inputDate >= today;
+};
 
 // Reusable parts
 const checklistItemSchema = z.object({
@@ -12,8 +19,8 @@ export const createProjectSchema = z.object({
     clientName: z.string().min(1, "Client name is required").max(100),
     scope: z.string().max(5000).optional(),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']),
-    overallDeadline: z.string().datetime(), // Expects ISO string
-    currentDeadline: z.string().datetime().optional(),
+    overallDeadline: z.string().datetime().refine(dateNotPast, "Deadline cannot be in the past"),
+    currentDeadline: z.string().datetime().refine(dateNotPast, "Deadline cannot be in the past").optional(),
 
     // Assignments (Optional strings/UUIDs)
     assignedDesignerId: z.string().uuid().nullable().optional(),
@@ -35,8 +42,8 @@ export const adminUpdateProjectSchema = z.object({
     scope: z.string().max(5000).optional(),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
     stage: z.enum(['UPCOMING', 'DESIGN', 'DEVELOPMENT', 'QA', 'SEND_TO_CLIENT', 'ADMIN_REVIEW', 'SENT_TO_CLIENT', 'COMPLETED']).optional(),
-    overallDeadline: z.string().datetime().optional(),
-    currentDeadline: z.string().datetime().optional(),
+    overallDeadline: z.string().datetime().refine(dateNotPast, "Deadline cannot be in the past").optional(),
+    currentDeadline: z.string().datetime().refine(dateNotPast, "Deadline cannot be in the past").optional(),
 
     isDelayed: z.boolean().optional(),
     qaFailCount: z.number().int().min(0).max(100).optional(),
@@ -105,7 +112,7 @@ export const recordQAFeedbackSchema = z.object({
 
 // Phase 2A: Admin deadline modification
 export const changeDeadlineSchema = z.object({
-    newDeadline: z.string().datetime(),
+    newDeadline: z.string().datetime().refine(dateNotPast, "Deadline cannot be in the past"),
     justification: z.string().min(15, 'Justification must be at least 15 characters'),
     confirm: z.literal(true, { errorMap: () => ({ message: 'Confirmation required' }) }),
     version: z.number().int().positive()

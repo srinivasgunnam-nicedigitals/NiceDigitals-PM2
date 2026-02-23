@@ -341,5 +341,12 @@ export const backendApi = {
     getTeamMembers: async (projectId: string) => {
         const response = await api.get<ProjectTeamMember[]>(`projects/${projectId}/team-members`);
         return response.data;
+    },
+
+    /**
+     * Delete a comment — ownership enforced by backend (only author can delete)
+     */
+    deleteComment: async (projectId: string, commentId: string) => {
+        await api.delete(`projects/${projectId}/comments/${commentId}`);
     }
 };

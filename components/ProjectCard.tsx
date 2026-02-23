@@ -14,33 +14,17 @@ interface ProjectCardProps {
 export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick }) => {
   const { currentUser, users, updateProject } = useApp();
 
-  // Calculate checklist progress based on current stage
+  // Calculate checklist progress aggregated across all phases
   const getChecklistProgress = () => {
-    let completed = 0;
-    let total = 0;
+    const allTasks = [
+      ...(project.designChecklist || []),
+      ...(project.devChecklist || []),
+      ...(project.qaChecklist || []),
+      ...(project.finalChecklist || [])
+    ];
 
-    switch (project.stage) {
-      case ProjectStage.DESIGN:
-        completed = (project.designChecklist || []).filter(i => i.completed).length;
-        total = (project.designChecklist || []).length;
-        break;
-      case ProjectStage.DEVELOPMENT:
-        completed = (project.devChecklist || []).filter(i => i.completed).length;
-        total = (project.devChecklist || []).length;
-        break;
-      case ProjectStage.QA:
-        completed = (project.qaChecklist || []).filter(i => i.completed).length;
-        total = (project.qaChecklist || []).length;
-        break;
-      case ProjectStage.ADMIN_REVIEW:
-        completed = (project.finalChecklist || []).filter(i => i.completed).length;
-        total = (project.finalChecklist || []).length;
-        break;
-      default:
-        // For UPCOMING and COMPLETED stages, show design checklist as reference
-        completed = (project.designChecklist || []).filter(i => i.completed).length;
-        total = (project.designChecklist || []).length;
-    }
+    const completed = allTasks.filter(i => i.completed).length;
+    const total = allTasks.length;
 
     return { completed, total };
   };

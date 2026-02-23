@@ -18,8 +18,8 @@ import {
     deleteTeamMemberSchema
 } from '../utils/validation';
 import { logAudit } from '../utils/audit';
-
 import { AppError } from '../utils/AppError';
+import { isBefore, startOfDay } from 'date-fns';
 
 const sanitizeScopeHtml = (html: string) => {
     return html
@@ -57,10 +57,14 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
                     tenantId: true,
                     version: true, // VERSION ENFORCEMENT: Include version in response
 
-                    // Relations (Summary only)
                     assignedDesignerId: true,
                     assignedDevManagerId: true,
                     assignedQAId: true,
+                    currentDeadline: true,
+                    designChecklist: true,
+                    devChecklist: true,
+                    qaChecklist: true,
+                    finalChecklist: true,
 
                     assignedDesigner: {
                         select: { id: true, name: true, avatar: true, tenantId: true }
@@ -79,18 +83,30 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
             prisma.project.count({ where: { tenantId } })
         ]);
 
-        const safeProjects = projects.map(p => ({
-            ...p,
-            assignedDesigner: p.assignedDesigner && p.assignedDesigner.tenantId === tenantId
-                ? { id: p.assignedDesigner.id, name: p.assignedDesigner.name, avatar: p.assignedDesigner.avatar }
-                : null,
-            assignedDevManager: p.assignedDevManager && p.assignedDevManager.tenantId === tenantId
-                ? { id: p.assignedDevManager.id, name: p.assignedDevManager.name, avatar: p.assignedDevManager.avatar }
-                : null,
-            assignedQA: p.assignedQA && p.assignedQA.tenantId === tenantId
-                ? { id: p.assignedQA.id, name: p.assignedQA.name, avatar: p.assignedQA.avatar }
-                : null
-        }));
+        const today = startOfDay(new Date());
+
+        const safeProjects = projects.map(p => {
+            const deadline = p.currentDeadline ? new Date(p.currentDeadline as Date) : new Date(p.overallDeadline);
+            const dynamicallyDelayed = p.isDelayed || isBefore(deadline, today);
+
+            return {
+                ...p,
+                isDelayed: dynamicallyDelayed,
+                designChecklist: p.designChecklist,
+                devChecklist: p.devChecklist,
+                qaChecklist: p.qaChecklist,
+                finalChecklist: p.finalChecklist,
+                assignedDesigner: p.assignedDesigner && p.assignedDesigner.tenantId === tenantId
+                    ? { id: p.assignedDesigner.id, name: p.assignedDesigner.name, avatar: p.assignedDesigner.avatar }
+                    : null,
+                assignedDevManager: p.assignedDevManager && p.assignedDevManager.tenantId === tenantId
+                    ? { id: p.assignedDevManager.id, name: p.assignedDevManager.name, avatar: p.assignedDevManager.avatar }
+                    : null,
+                assignedQA: p.assignedQA && p.assignedQA.tenantId === tenantId
+                    ? { id: p.assignedQA.id, name: p.assignedQA.name, avatar: p.assignedQA.avatar }
+                    : null
+            };
+        });
 
         res.json({
             data: safeProjects,
@@ -134,9 +150,14 @@ export const getProject = async (req: Request, res: Response, next: NextFunction
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Sanitize
+        // Sanitize & Calculate Delay
+        const today = startOfDay(new Date());
+        const deadline = project.currentDeadline ? new Date(project.currentDeadline as Date) : new Date(project.overallDeadline);
+        const dynamicallyDelayed = project.isDelayed || isBefore(deadline, today);
+
         const safeProject = {
             ...project,
+            isDelayed: dynamicallyDelayed,
             assignedDesigner: project.assignedDesigner && project.assignedDesigner.tenantId === tenantId
                 ? { id: project.assignedDesigner.id, name: project.assignedDesigner.name, avatar: project.assignedDesigner.avatar }
                 : null,
@@ -819,6 +840,40 @@ export const getProjectComments = async (req: Request, res: Response, next: Next
             data: comments,
             meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// DELETE /api/projects/:id/comments/:commentId
+// Ownership-only: only the original author may delete their message
+export const deleteComment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id: projectId, commentId } = req.params;
+        const userId = req.user?.id;
+        const tenantId = req.user?.tenantId;
+
+        if (!userId || !tenantId) {
+            throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
+        }
+
+        // Fetch the comment — verify tenant isolation first
+        const comment = await prisma.comment.findFirst({
+            where: { id: commentId, projectId, tenantId }
+        });
+
+        if (!comment) {
+            throw AppError.notFound('Comment not found', 'COMMENT_NOT_FOUND');
+        }
+
+        // OWNERSHIP CHECK: only the original author may delete
+        if (comment.userId !== userId) {
+            throw AppError.forbidden('You can only delete your own messages', 'NOT_COMMENT_OWNER');
+        }
+
+        await prisma.comment.delete({ where: { id: commentId } });
+
+        res.json({ success: true });
     } catch (error) {
         next(error);
     }

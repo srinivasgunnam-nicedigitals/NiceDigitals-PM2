@@ -1,5 +1,3 @@
-// This is your Prisma schema file
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,113 +7,73 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Enums matching frontend exactly
-enum UserRole {
-  ADMIN
-  DESIGNER
-  DEV_MANAGER
-  QA_ENGINEER
-}
-
-enum ProjectStage {
-  UPCOMING
-  DESIGN
-  DEVELOPMENT
-  QA
-  SEND_TO_CLIENT
-  ADMIN_REVIEW
-  SENT_TO_CLIENT
-  COMPLETED
-}
-
-enum Priority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-}
-
-enum TeamLeadRole {
-  DESIGN
-  DEV
-  QA
-}
-
 model Tenant {
-  id        String    @id @default(uuid())
-  name      String
-  createdAt DateTime  @default(now())
-  
-  users     User[]
-  projects  Project[]
-  comments  Comment[]
-  history   HistoryItem[]
-  scores    ScoreEntry[]
-  notifications Notification[]
+  id            String              @id @default(uuid())
+  name          String
+  createdAt     DateTime            @default(now())
   auditLogs     AuditLog[]
+  comments      Comment[]
+  history       HistoryItem[]
+  notifications Notification[]
+  projects      Project[]
   teamMembers   ProjectTeamMember[]
+  scores        ScoreEntry[]
+  users         User[]
 }
 
 model AuditLog {
-  id        String   @id @default(uuid())
-  action    String
-  target    String   // Description or ID of target
-  actorId   String
+  id         String   @id @default(uuid())
+  action     String
+  target     String
+  actorId    String
   actorEmail String?
-  timestamp DateTime @default(now())
-  metadata  Json?
-
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  timestamp  DateTime @default(now())
+  metadata   Json?
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
 
   @@index([tenantId])
   @@index([timestamp])
 }
 
 model AuditOutbox {
-  id        String   @id @default(uuid())
-  action    String
-  target    String
-  actorId   String
+  id         String   @id @default(uuid())
+  action     String
+  target     String
+  actorId    String
   actorEmail String?
-  tenantId  String
-  metadata  Json?
-  createdAt DateTime @default(now())
+  tenantId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String   // F-002: Remediation - Mandatory Password
-  role      UserRole
-  avatar    String?
-
-  isActive          Boolean   @default(true)
-  lastRevocationAt  DateTime? // Comparing with JWT iat ensures revocation works without changing auth controller
-
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-
-  // Relations
-  projectsDesigned Project[] @relation("AssignedDesigner")
-  projectsManaged  Project[] @relation("AssignedDevManager")
-  projectsQA       Project[] @relation("AssignedQA")
-  
+  id               String               @id @default(uuid())
+  name             String
+  email            String               @unique
+  password         String
+  role             UserRole
+  avatar           String?
+  tenantId         String
+  isActive         Boolean              @default(true)
+  lastRevocationAt DateTime?
   comments         Comment[]
-  scores           ScoreEntry[] 
   notifications    Notification[]
   resetTokens      PasswordResetToken[]
+  projectsDesigned Project[]            @relation("AssignedDesigner")
+  projectsManaged  Project[]            @relation("AssignedDevManager")
+  projectsQA       Project[]            @relation("AssignedQA")
+  scores           ScoreEntry[]
+  tenant           Tenant               @relation(fields: [tenantId], references: [id])
 }
 
 model PasswordResetToken {
   id        String   @id @default(uuid())
-  tokenHash String   @unique // F-006: Remediation - Store Hash Only
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
-
   userId    String
+  tokenHash String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tokenHash])
@@ -123,48 +81,36 @@ model PasswordResetToken {
 }
 
 model Project {
-  id              String       @id @default(uuid())
-  name            String
-  clientName      String
-  scope           String
-  priority        Priority
-  stage           ProjectStage
-  overallDeadline DateTime
-  currentDeadline DateTime?
-  
-  tenantId        String
-  tenant          Tenant       @relation(fields: [tenantId], references: [id])
-
-  // Relations
+  id                   String              @id @default(uuid())
+  name                 String
+  clientName           String
+  scope                String
+  priority             Priority
+  stage                ProjectStage
+  overallDeadline      DateTime
+  currentDeadline      DateTime?
+  tenantId             String
   assignedDesignerId   String?
-  assignedDesigner     User?   @relation("AssignedDesigner", fields: [assignedDesignerId], references: [id])
-  
   assignedDevManagerId String?
-  assignedDevManager   User?   @relation("AssignedDevManager", fields: [assignedDevManagerId], references: [id])
-  
   assignedQAId         String?
-  assignedQA           User?   @relation("AssignedQA", fields: [assignedQAId], references: [id])
-
-  // JSON Checklists for direct mapping to frontend
-  designChecklist Json[]
-  devChecklist    Json[]
-  qaChecklist     Json[]
-  finalChecklist  Json[]
-
-  isDelayed    Boolean @default(false)
-  qaFailCount  Int     @default(0)
-
-  // Optimistic locking for conflict detection
-  version      Int      @default(1)
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  completedAt  DateTime?
-
-  comments     Comment[]
-  history      HistoryItem[]
-  scores       ScoreEntry[]
-  teamMembers  ProjectTeamMember[]
+  designChecklist      Json[]
+  devChecklist         Json[]
+  qaChecklist          Json[]
+  finalChecklist       Json[]
+  isDelayed            Boolean             @default(false)
+  qaFailCount          Int                 @default(0)
+  createdAt            DateTime            @default(now())
+  completedAt          DateTime?
+  updatedAt            DateTime            @updatedAt
+  version              Int                 @default(1)
+  comments             Comment[]
+  history              HistoryItem[]
+  assignedDesigner     User?               @relation("AssignedDesigner", fields: [assignedDesignerId], references: [id])
+  assignedDevManager   User?               @relation("AssignedDevManager", fields: [assignedDevManagerId], references: [id])
+  assignedQA           User?               @relation("AssignedQA", fields: [assignedQAId], references: [id])
+  tenant               Tenant              @relation(fields: [tenantId], references: [id])
+  teamMembers          ProjectTeamMember[]
+  scores               ScoreEntry[]
 
   @@index([tenantId])
   @@index([assignedDevManagerId])
@@ -175,30 +121,25 @@ model Comment {
   id        String   @id @default(uuid())
   text      String
   timestamp DateTime @default(now())
-  
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  
   projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
   tenantId  String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model HistoryItem {
-  id        String       @id @default(uuid())
-  stage     ProjectStage
-  action    String
-  timestamp DateTime     @default(now())
-  userId    String       
+  id                String       @id @default(uuid())
+  stage             ProjectStage
+  action            String
+  timestamp         DateTime     @default(now())
+  userId            String
   rejectionSnapshot Json?
-
-  projectId String
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  projectId         String
+  tenantId          String
+  project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tenant            Tenant       @relation(fields: [tenantId], references: [id])
 }
 
 model ScoreEntry {
@@ -206,15 +147,12 @@ model ScoreEntry {
   date      DateTime @default(now())
   points    Int
   reason    String
-  
   projectId String
-  project   Project  @relation(fields: [projectId], references: [id])
-  
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-
   tenantId  String
+  project   Project  @relation(fields: [projectId], references: [id])
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([tenantId, userId])
   @@index([tenantId, date])
@@ -224,15 +162,13 @@ model Notification {
   id        String   @id @default(uuid())
   title     String
   message   String
-  type      String   // 'assignment', 'alert', 'info'
+  type      String
   read      Boolean  @default(false)
   timestamp DateTime @default(now())
-
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-
   tenantId  String
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([tenantId])
@@ -249,11 +185,41 @@ model ProjectTeamMember {
   notes     String?
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
-
   project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tenant    Tenant       @relation(fields: [tenantId], references: [id])
 
   @@index([projectId])
   @@index([tenantId])
   @@index([projectId, leadRole])
+}
+
+enum UserRole {
+  ADMIN
+  DESIGNER
+  DEV_MANAGER
+  QA_ENGINEER
+}
+
+enum ProjectStage {
+  UPCOMING
+  DESIGN
+  DEVELOPMENT
+  QA
+  SEND_TO_CLIENT
+  SENT_TO_CLIENT
+  COMPLETED
+  ADMIN_REVIEW
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TeamLeadRole {
+  DESIGN
+  DEV
+  QA
 }

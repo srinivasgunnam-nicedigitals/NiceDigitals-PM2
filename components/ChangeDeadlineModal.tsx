@@ -21,7 +21,9 @@ export const ChangeDeadlineModal: React.FC<ChangeDeadlineModalProps> = ({ projec
         if (!newDeadline) return false;
         if (justification.trim().length < 15) return false;
         if (!confirmed) return false;
-        const deadlineDate = new Date(newDeadline);
+        // Parse as local date at noon to avoid UTC midnight timezone issues
+        const [year, month, day] = newDeadline.split('-').map(Number);
+        const deadlineDate = new Date(year, month - 1, day, 12, 0, 0);
         if (deadlineDate <= new Date()) return false;
         return true;
     };
@@ -43,7 +45,7 @@ export const ChangeDeadlineModal: React.FC<ChangeDeadlineModalProps> = ({ projec
             }
 
             await backendApi.changeDeadline(project.id, {
-                newDeadline,
+                newDeadline: new Date(newDeadline).toISOString(), // Convert date string to full ISO datetime
                 justification: justification.trim(),
                 confirm: true,
                 version // VERSION HARD GUARD enforced

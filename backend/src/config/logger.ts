@@ -1,8 +1,10 @@
 import pino from 'pino';
 
-// Create logger instance with production-safe configuration
+const isDev = process.env.NODE_ENV !== 'production';
+
+// Create logger instance
 export const logger = pino({
-    level: process.env.LOG_LEVEL || 'info',
+    level: process.env.LOG_LEVEL || (isDev ? 'info' : 'warn'),
 
     // Redact sensitive fields to prevent PII leaks
     redact: {
@@ -12,22 +14,23 @@ export const logger = pino({
             'password',
             'token',
             'secret',
-            'email' // Redact in production logs
         ],
         remove: true
     },
 
-    // Format for development vs production
-    transport: process.env.NODE_ENV !== 'production' ? {
+    // In dev: clean human-readable output. In production: structured JSON.
+    transport: isDev ? {
         target: 'pino-pretty',
         options: {
             colorize: true,
             translateTime: 'HH:MM:ss',
-            ignore: 'pid,hostname'
+            ignore: 'pid,hostname,env',
+            // Only show message + any extra fields, no big JSON blobs
+            singleLine: true,
+            messageFormat: '{msg}',
         }
     } : undefined,
 
-    // Base fields for all logs
     base: {
         env: process.env.NODE_ENV || 'development'
     }
