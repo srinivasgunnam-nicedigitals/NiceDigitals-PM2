@@ -1,7 +1,7 @@
 module.exports = {
     apps: [
         {
-            name: 'pma-backend',
+            name: 'nd_api',
             script: './dist/index.js',
             instances: 1,
             autorestart: true,

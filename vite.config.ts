@@ -13,7 +13,7 @@ export default defineConfig(() => {
       react(),
       tailwindcss(),
     ],
-    base: '/nd_pma2/', // Set base path for assets
+    base: '/ndpma/', // Set base path for assets
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

@@ -380,11 +380,11 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                 // Add sanitized updates to query
                 for (const [key, value] of Object.entries(sanitizedUpdates)) {
                     if (value !== undefined) {
-                        updateFields.push(`"${key}" = $${paramIndex}`);
-                        // Handle JSON fields for Checklist updates explicitly
                         if (['designChecklist', 'devChecklist', 'qaChecklist', 'finalChecklist'].includes(key)) {
-                            updateValues.push(JSON.stringify(value));
+                            updateFields.push(`"${key}" = $${paramIndex}::jsonb[]`);
+                            updateValues.push(Array.isArray(value) ? value.map((x: any) => JSON.stringify(x)) : []);
                         } else {
+                            updateFields.push(`"${key}" = $${paramIndex}`);
                             updateValues.push(value);
                         }
                         paramIndex++;
@@ -397,15 +397,16 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
 
                 // Add WHERE clause parameters
                 const idParam = paramIndex;
-                const versionParam = paramIndex + 1;
-                updateValues.push(id, expectedVersion);
+                const tenantIdParam = paramIndex + 1;
+                const versionParam = paramIndex + 2;
+                updateValues.push(id, tenantId, expectedVersion);
 
                 // Execute atomic update
-                const result = await tx.$executeRaw`
+                const result = await tx.$executeRawUnsafe(`
                     UPDATE "Project"
-                    SET ${Prisma.raw(updateFields.join(', '))}
-                    WHERE id = ${id}::uuid AND "tenantId" = ${tenantId} AND version = ${expectedVersion}
-                `;
+                    SET ${updateFields.join(', ')}
+                    WHERE id = $${idParam} AND "tenantId" = $${tenantIdParam} AND version = $${versionParam}
+                `, ...updateValues);
 
                 // Verify exactly 1 row affected (version matched)
                 if (result !== 1) {
@@ -497,8 +498,13 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
             // Add allowed updates to query
             for (const [key, value] of Object.entries(allowedUpdates)) {
                 if (value !== undefined) {
-                    updateFields.push(`"${key}" = $${paramIndex}`);
-                    updateValues.push(JSON.stringify(value)); // Checklists are JSONB
+                    if (['designChecklist', 'devChecklist', 'qaChecklist', 'finalChecklist'].includes(key)) {
+                        updateFields.push(`"${key}" = $${paramIndex}::jsonb[]`);
+                        updateValues.push(Array.isArray(value) ? value.map((x: any) => JSON.stringify(x)) : []);
+                    } else {
+                        updateFields.push(`"${key}" = $${paramIndex}`);
+                        updateValues.push(value);
+                    }
                     paramIndex++;
                 }
             }
@@ -508,14 +514,17 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
             updateFields.push('"updatedAt" = NOW()');
 
             // Add WHERE clause parameters
-            updateValues.push(id, expectedVersion);
+            const idParam = paramIndex;
+            const tenantIdParam = paramIndex + 1;
+            const versionParam = paramIndex + 2;
+            updateValues.push(id, tenantId, expectedVersion);
 
             // Execute atomic update
-            const result = await tx.$executeRaw`
+            const result = await tx.$executeRawUnsafe(`
                 UPDATE "Project"
-                SET ${Prisma.raw(updateFields.join(', '))}
-                WHERE id = ${id}::uuid AND "tenantId" = ${tenantId} AND version = ${expectedVersion}
-            `;
+                SET ${updateFields.join(', ')}
+                WHERE id = $${idParam} AND "tenantId" = $${tenantIdParam} AND version = $${versionParam}
+            `, ...updateValues);
 
             // Verify exactly 1 row affected (version matched)
             if (result !== 1) {

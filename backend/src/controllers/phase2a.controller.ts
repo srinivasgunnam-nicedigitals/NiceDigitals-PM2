@@ -67,7 +67,7 @@ export const changeDeadline = async (req: Request, res: Response, next: NextFunc
                 SET "overallDeadline" = ${deadlineDate}::timestamp,
                     version = version + 1,
                     "updatedAt" = NOW()
-                WHERE id = ${id}::uuid 
+                WHERE id = ${id} 
                   AND "tenantId" = ${tenantId}
                   AND version = ${version}
             `;
@@ -167,10 +167,10 @@ export const reassignLead = async (req: Request, res: Response, next: NextFuncti
                 previousUserId = existing.assignedDesignerId;
                 updateResult = await tx.$executeRaw`
                     UPDATE "Project"
-                    SET "assignedDesignerId" = ${newUserId}::uuid,
+                    SET "assignedDesignerId" = ${newUserId},
                         version = version + 1,
                         "updatedAt" = NOW()
-                    WHERE id = ${id}::uuid 
+                    WHERE id = ${id} 
                       AND "tenantId" = ${tenantId}
                       AND version = ${version}
                 `;
@@ -178,10 +178,10 @@ export const reassignLead = async (req: Request, res: Response, next: NextFuncti
                 previousUserId = existing.assignedDevManagerId;
                 updateResult = await tx.$executeRaw`
                     UPDATE "Project"
-                    SET "assignedDevManagerId" = ${newUserId}::uuid,
+                    SET "assignedDevManagerId" = ${newUserId},
                         version = version + 1,
                         "updatedAt" = NOW()
-                    WHERE id = ${id}::uuid 
+                    WHERE id = ${id} 
                       AND "tenantId" = ${tenantId}
                       AND version = ${version}
                 `;
@@ -189,10 +189,10 @@ export const reassignLead = async (req: Request, res: Response, next: NextFuncti
                 previousUserId = existing.assignedQAId;
                 updateResult = await tx.$executeRaw`
                     UPDATE "Project"
-                    SET "assignedQAId" = ${newUserId}::uuid,
+                    SET "assignedQAId" = ${newUserId},
                         version = version + 1,
                         "updatedAt" = NOW()
-                    WHERE id = ${id}::uuid 
+                    WHERE id = ${id} 
                       AND "tenantId" = ${tenantId}
                       AND version = ${version}
                 `;
@@ -290,7 +290,7 @@ export const addTeamMember = async (req: Request, res: Response, next: NextFunct
                 UPDATE "Project"
                 SET version = version + 1,
                     "updatedAt" = NOW()
-                WHERE id = ${projectId}::uuid 
+                WHERE id = ${projectId} 
                   AND "tenantId" = ${tenantId}
                   AND version = ${version}
             `;
@@ -402,7 +402,7 @@ export const updateTeamMember = async (req: Request, res: Response, next: NextFu
                 UPDATE "Project"
                 SET version = version + 1,
                     "updatedAt" = NOW()
-                WHERE id = ${projectId}::uuid 
+                WHERE id = ${projectId} 
                   AND "tenantId" = ${tenantId}
                   AND version = ${version}
             `;
@@ -510,7 +510,7 @@ export const deleteTeamMember = async (req: Request, res: Response, next: NextFu
                 UPDATE "Project"
                 SET version = version + 1,
                     "updatedAt" = NOW()
-                WHERE id = ${projectId}::uuid 
+                WHERE id = ${projectId} 
                   AND "tenantId" = ${tenantId}
                   AND version = ${version}
             `;
