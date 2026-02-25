@@ -42,21 +42,23 @@ interface SidebarItemProps {
   label: string;
   isActive?: boolean;
   onClick: () => void;
+  isCollapsed?: boolean;
 }
 
-const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, isActive, onClick }) => (
+const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, isActive, onClick, isCollapsed }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${isActive
+    title={isCollapsed ? label : undefined}
+    className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 rounded-lg transition-all duration-200 group ${isActive
       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)] dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-600'
       : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700'
       }`}
   >
-    <div className={`${isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'} transition-colors`}>
+    <div className={`${isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'} transition-colors shrink-0`}>
       {React.cloneElement(icon as any, { size: 18, strokeWidth: isActive ? 2.5 : 2 })}
     </div>
-    <span className={`text-[13px] font-semibold tracking-tight`}>{label}</span>
-    {isActive && <div className="ml-auto w-1 h-1 bg-indigo-600 rounded-full" />}
+    {!isCollapsed && <span className={`text-[13px] font-semibold tracking-tight whitespace-nowrap`}>{label}</span>}
+    {isActive && !isCollapsed && <div className="ml-auto w-1 h-1 bg-indigo-600 rounded-full shrink-0" />}
   </button>
 );
 
@@ -73,6 +75,7 @@ export const Layout: React.FC = () => {
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [selectedProject, setSelectedProject] = useState<any>(null);
@@ -154,14 +157,24 @@ export const Layout: React.FC = () => {
       )}
 
       {/* Sidebar - Pro Workspace Minimalist */}
-      <aside className={`w-64 bg-[#F9FAFB] dark:bg-slate-800 border-r border-slate-200/60 dark:border-slate-700 flex flex-col fixed lg:relative h-full z-50 transition-transform duration-300 ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <aside className={`bg-[#F9FAFB] dark:bg-slate-800 border-r border-slate-200/60 dark:border-slate-700 flex flex-col fixed lg:relative h-full z-50 transition-all duration-300 ${desktopSidebarCollapsed ? 'w-20' : 'w-64'} ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="p-5">
-          <div className="flex items-center gap-2.5 px-2 py-1.5 mb-8">
-            <div className="w-8 h-8 bg-slate-900 dark:bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm ring-1 ring-white/20">N</div>
-            <div className="flex flex-col flex-1">
-              <h1 className="font-bold text-[14px] leading-none text-slate-900 dark:text-slate-100">Nice Workspace</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">Premium Plan</p>
-            </div>
+          <div className={`flex items-center gap-2.5 px-2 py-1.5 mb-8 ${desktopSidebarCollapsed ? 'justify-center relative' : ''}`}>
+            <div className="w-8 h-8 shrink-0 bg-slate-900 dark:bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm ring-1 ring-white/20">N</div>
+            {!desktopSidebarCollapsed && (
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <h1 className="font-bold text-[14px] leading-none text-slate-900 dark:text-slate-100 truncate">Nice Workspace</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 truncate">Premium Plan</p>
+              </div>
+            )}
+            {/* Desktop Collapse Toggle */}
+            <button
+              onClick={() => setDesktopSidebarCollapsed(!desktopSidebarCollapsed)}
+              className={`hidden lg:flex p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all ${desktopSidebarCollapsed ? 'absolute -right-3 top-6 translate-x-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm z-50 rounded-full' : 'ml-auto'}`}
+              title={desktopSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {desktopSidebarCollapsed ? <ChevronRight size={14} /> : <div className="rotate-180"><ChevronRight size={14} /></div>}
+            </button>
             {/* Mobile Close Button */}
             <button
               onClick={() => setMobileSidebarOpen(false)}
@@ -172,35 +185,47 @@ export const Layout: React.FC = () => {
           </div>
 
           <div className="space-y-1">
-            <p className="text-[11px] font-bold text-slate-400 px-3 py-2 uppercase tracking-wider">Main</p>
+            {!desktopSidebarCollapsed ? (
+              <p className="text-[11px] font-bold text-slate-400 px-3 py-2 uppercase tracking-wider">Main</p>
+            ) : (
+              <div className="h-px w-6 bg-slate-200 dark:bg-slate-700 mx-auto mb-4 mt-2" />
+            )}
             <SidebarItem
               icon={<LayoutDashboard />}
               label="Dashboard"
               isActive={currentPath === '/dashboard' || currentPath === '/'}
               onClick={() => navigate('/dashboard')}
+              isCollapsed={desktopSidebarCollapsed}
             />
             <SidebarItem
               icon={<Layers />}
               label="Projects"
               isActive={currentPath === '/projects'}
               onClick={() => navigate('/projects')}
+              isCollapsed={desktopSidebarCollapsed}
             />
             <SidebarItem
               icon={<Inbox />}
               label="Activity"
               isActive={currentPath === '/activity'}
               onClick={() => navigate('/activity')}
+              isCollapsed={desktopSidebarCollapsed}
             />
           </div>
 
           <div className="mt-8 space-y-1">
-            <p className="text-[11px] font-bold text-slate-400 px-3 py-2 uppercase tracking-wider">Management</p>
+            {!desktopSidebarCollapsed ? (
+              <p className="text-[11px] font-bold text-slate-400 px-3 py-2 uppercase tracking-wider">Management</p>
+            ) : (
+              <div className="h-px w-6 bg-slate-200 dark:bg-slate-700 mx-auto mb-4 mt-2" />
+            )}
             {currentUser?.role === UserRole.ADMIN && (
               <SidebarItem
                 icon={<Users />}
                 label="Team Roster"
                 isActive={currentPath === '/team'}
                 onClick={() => navigate('/team')}
+                isCollapsed={desktopSidebarCollapsed}
               />
             )}
             <SidebarItem
@@ -208,12 +233,14 @@ export const Layout: React.FC = () => {
               label="Leaderboard"
               isActive={currentPath === '/leaderboard'}
               onClick={() => navigate('/leaderboard')}
+              isCollapsed={desktopSidebarCollapsed}
             />
             <SidebarItem
               icon={<Archive />}
               label="Archive"
               isActive={currentPath === '/archive'}
               onClick={() => navigate('/archive')}
+              isCollapsed={desktopSidebarCollapsed}
             />
           </div>
         </div>
@@ -221,14 +248,19 @@ export const Layout: React.FC = () => {
         <div className="mt-auto p-4 border-t border-slate-200/60 dark:border-slate-700">
           <div
             onClick={() => setShowSettings(true)}
-            className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group"
+            className={`flex items-center gap-3 ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group`}
+            title={desktopSidebarCollapsed ? "Settings" : undefined}
           >
-            <img src={currentUser?.avatar} className="w-8 h-8 rounded-lg ring-1 ring-slate-200 dark:ring-slate-700" alt="User" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate leading-none">{currentUser?.name}</p>
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 truncate">{(currentUser?.role || '').replace('_', ' ')}</p>
-            </div>
-            <Settings size={14} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
+            <img src={currentUser?.avatar} className="w-8 h-8 rounded-lg ring-1 ring-slate-200 dark:ring-slate-700 shrink-0" alt="User" />
+            {!desktopSidebarCollapsed && (
+              <>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate leading-none">{currentUser?.name}</p>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 truncate">{(currentUser?.role || '').replace('_', ' ')}</p>
+                </div>
+                <Settings size={14} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors shrink-0" />
+              </>
+            )}
           </div>
 
           <Button
@@ -236,10 +268,11 @@ export const Layout: React.FC = () => {
             size="sm"
             onClick={toggleTheme}
             fullWidth
-            className="mt-3"
+            className={`mt-3 ${desktopSidebarCollapsed ? 'px-0 justify-center' : ''}`}
+            title={desktopSidebarCollapsed ? (theme === 'light' ? 'Dark Mode' : 'Light Mode') : undefined}
           >
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-            {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+            {theme === 'light' ? <Moon size={14} className="shrink-0" /> : <Sun size={14} className="shrink-0" />}
+            {!desktopSidebarCollapsed && (theme === 'light' ? 'Dark Mode' : 'Light Mode')}
           </Button>
 
           <Button
@@ -249,10 +282,11 @@ export const Layout: React.FC = () => {
               logout();
             }}
             fullWidth
-            className="mt-2 text-slate-500 hover:text-red-600 hover:bg-red-50/50 dark:hover:bg-red-900/20"
+            className={`mt-2 text-slate-500 hover:text-red-600 hover:bg-red-50/50 dark:hover:bg-red-900/20 ${desktopSidebarCollapsed ? 'px-0 justify-center' : ''}`}
+            title={desktopSidebarCollapsed ? "Sign Out" : undefined}
           >
-            <LogOut size={14} />
-            Sign Out
+            <LogOut size={14} className="shrink-0" />
+            {!desktopSidebarCollapsed && "Sign Out"}
           </Button>
         </div>
       </aside>
