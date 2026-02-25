@@ -7,6 +7,7 @@ import { z } from 'zod';
 export const createUserSchema = z.object({
     name: z.string().min(1).max(100),
     email: z.string().email(),
+    username: z.string().min(3).max(50),
     password: z.string().min(8).max(100),
     role: z.enum(['ADMIN', 'DESIGNER', 'DEV_MANAGER', 'QA_ENGINEER']),
     avatar: z.string().url().optional()
@@ -15,6 +16,7 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
     name: z.string().min(1).max(100).optional(),
     email: z.string().email().optional(),
+    username: z.string().min(3).max(50).optional(),
     role: z.enum(['ADMIN', 'DESIGNER', 'DEV_MANAGER', 'QA_ENGINEER']).optional(),
     avatar: z.string().url().optional()
 }).strict();
@@ -34,6 +36,7 @@ export const getUsers = async (req: Request, res: Response) => {
                 select: {
                     id: true,
                     name: true,
+                    username: true,
                     email: true,
                     role: true,
                     avatar: true,
@@ -83,7 +86,14 @@ export const addUser = async (req: Request, res: Response) => {
             return res.status(400).json({ error: zodError.errors?.[0]?.message || 'Invalid request body' });
         }
 
-        const { name, email, password, role, avatar } = validated;
+        const { name, email, username, password, role, avatar } = validated;
+
+        let finalUsername = username;
+        if (!finalUsername) {
+            const base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+            const suffix = Math.floor(1000 + Math.random() * 9000);
+            finalUsername = `${base}${suffix}`;
+        }
 
         const hashedPassword = await passwordService.hash(password);
 
@@ -93,6 +103,7 @@ export const addUser = async (req: Request, res: Response) => {
                 data: {
                     name,
                     email,
+                    username: finalUsername,
                     password: hashedPassword,
                     role, // Only Admins can set this, checked above
                     avatar: avatar || null,
@@ -101,6 +112,7 @@ export const addUser = async (req: Request, res: Response) => {
                 select: {
                     id: true,
                     name: true,
+                    username: true,
                     email: true,
                     role: true,
                     avatar: true,
@@ -210,13 +222,14 @@ export const updateUser = async (req: Request, res: Response) => {
             return res.status(400).json({ error: zodError.errors?.[0]?.message || 'Invalid request body' });
         }
 
-        const { name, email, role, avatar } = parsedBody;
+        const { name, email, username, role, avatar } = parsedBody;
 
         // Build allowed updates
         const updateData: any = {};
 
-        // Name and Avatar: Allowed for Self and Admin
+        // Name, Username and Avatar: Allowed for Self and Admin
         if (name !== undefined) updateData.name = name;
+        if (username !== undefined) updateData.username = username;
         if (avatar !== undefined) updateData.avatar = avatar;
 
         // Email: Admin Only ? (Per common SaaS rules, usually Admin only or Email Verification required)
@@ -273,6 +286,7 @@ export const updateUser = async (req: Request, res: Response) => {
                 select: {
                     id: true,
                     name: true,
+                    username: true,
                     email: true,
                     role: true,
                     avatar: true,

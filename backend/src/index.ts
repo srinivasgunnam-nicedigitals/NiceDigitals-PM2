@@ -60,6 +60,8 @@ const FRONTEND_URL = process.env.FRONTEND_URL;
 // Allow both common dev ports for flexibility
 const allowedOrigins = [
     FRONTEND_URL,
+    'http://192.168.0.125:3000',
+    'http://192.168.0.125:5173',
     // Add other allowed origins if needed, but in production, FRONTEND_URL is the source of truth
 ];
 
@@ -92,23 +94,7 @@ app.use(cookieParser());
 
 // Rate Limiting
 import { rateLimit } from 'express-rate-limit';
-import RedisStore from 'rate-limit-redis';
-import Redis from 'ioredis';
-
-let limiterStore: any = undefined; // Default to MemoryStore
-
-if (process.env.REDIS_URL) {
-    const client = new Redis(process.env.REDIS_URL);
-    limiterStore = new RedisStore({
-        // @ts-expect-error - Known type mismatch between ioredis and rate-limit-redis
-        sendCommand: (...args: string[]) => client.call(...args),
-    });
-    logger.info('Using Redis for Rate Limiting');
-} else {
-    if (process.env.NODE_ENV === 'production') {
-        logger.warn('REDIS_URL not set — using in-memory rate limiting (not shared across instances)');
-    }
-}
+import { createLimiterStore } from './config/limiterStore';
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -116,15 +102,21 @@ const authLimiter = rateLimit({
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     message: { error: 'Too many login attempts, please try again later.' },
-    store: limiterStore as any
+    store: createLimiterStore('rl_auth')
 });
 
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: 300, // Relaxed limit for general API usage
+    limit: 300, // Per-user budget for general API usage
     standardHeaders: 'draft-7',
     legacyHeaders: false,
-    store: limiterStore as any
+    store: createLimiterStore('rl_api'),
+    // KEY FIX: Key by authenticated user ID so 50 users on the same LAN each
+    // get their own independent 300-request bucket instead of sharing one.
+    // Falls back to IP for any unauthenticated requests that reach this limiter.
+    keyGenerator: (req) => {
+        return (req.user?.id as string) || req.ip || 'unknown';
+    }
 });
 
 // Apply rate limiters at route mount points only to avoid accidental limiter stacking.
@@ -178,6 +170,7 @@ app.get('/', (req, res) => {
 
 import rankingRoutes from './routes/ranking.routes';
 import notificationRoutes from './routes/notifications.routes';
+import activityRoutes from './routes/activity.routes';
 import { emailService } from './services/email.service';
 import './workers/audit.worker';
 
@@ -189,6 +182,7 @@ app.use('/api/users', apiLimiter, userRoutes);
 app.use('/api/scores', apiLimiter, scoreRoutes);
 app.use('/api/rankings', apiLimiter, rankingRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
+app.use('/api/activity', apiLimiter, activityRoutes);
 
 // Global error handler
 app.use(errorHandler);
@@ -199,8 +193,8 @@ const startServer = async () => {
         logger.warn('SMTP service unavailable. Emails will not be sent, but server will start.');
     }
 
-    app.listen(PORT, () => {
-        logger.info({ port: PORT }, 'Server started successfully');
+    app.listen(PORT as number, '0.0.0.0', () => {
+        logger.info({ port: PORT }, 'Server started successfully on network IP 0.0.0.0');
     });
 };
 

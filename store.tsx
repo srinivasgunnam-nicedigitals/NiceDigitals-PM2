@@ -13,10 +13,13 @@ interface AppContextType {
   currentUser: User | null;
   users: User[];
   projects: Project[];
+  projectStats: { upcoming: number, design: number, dev: number, qa: number, review: number, completed: number, delayed: number, totalActive: number } | undefined;
   scores: ScoreEntry[];
   clients: string[];
   isLoading: boolean;
+  isAuthenticating: boolean;
   setCurrentUser: (user: User | null) => void;
+  setAuthenticating: (isAuthenticating: boolean) => void;
   addProject: (p: Partial<Project>) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
   addUser: (u: User) => void;
@@ -66,6 +69,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : null;
   });
 
+  // Auth State Machine
+  // AUTHENTICATING state blocks queries immediately after login until navigation settles
+  const [isAuthenticating, setAuthenticating] = useState(false);
+
   // VERSION CONFLICT STATE
   const [conflictState, setConflictState] = useState<{
     isOpen: boolean;
@@ -83,7 +90,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     queryFn: backendApi.getUsers,
     initialData: [],
     refetchOnWindowFocus: true,
-    enabled: !!currentUser
+    enabled: !!currentUser && !isAuthenticating
   });
 
   // --- PAGINATION STATE ---
@@ -99,7 +106,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     queryKey: ['projects', page],
     queryFn: () => backendApi.getProjects(page, 10), // Default 10 items per page
     placeholderData: keepPreviousData,
-    enabled: !!currentUser
+    enabled: !!currentUser && !isAuthenticating
   });
 
   // Extract projects and update meta effect
@@ -111,6 +118,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPaginationMeta(projectData.meta);
     }
   }, [projectData?.meta]);
+
+  const { data: projectStats } = useQuery({
+    queryKey: ['projectStats'],
+    queryFn: backendApi.getProjectStats,
+    enabled: !!currentUser && !isAuthenticating
+  });
 
   // VERSION CONFLICT EVENT LISTENER
   useEffect(() => {
@@ -142,7 +155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     queryKey: ['scores'],
     queryFn: backendApi.getScores,
     initialData: [] as ScoreEntry[],
-    enabled: !!currentUser
+    enabled: !!currentUser && !isAuthenticating
   });
 
 
@@ -153,7 +166,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addProjectMutation = useMutation({
     mutationFn: backendApi.createProject,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['clientNames'] }); // New client may have been added
+    }
   });
 
   const updateProjectMutation = useMutation({
@@ -176,7 +192,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteProjectMutation = useMutation({
     mutationFn: backendApi.deleteProject,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['clientNames'] }); // A client may have been removed
+    }
   });
 
   const addCommentMutation = useMutation({
@@ -474,12 +493,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Keep derived state logic (getDevRankings, etc.) as is, since it depends on 'projects' which is now from React Query
-  // Note: We need to memoize clients same as before
+  const { data: clientNames = [] } = useQuery({
+    queryKey: ['clientNames'],
+    queryFn: backendApi.getClientNames,
+    enabled: !!currentUser,
+    staleTime: 30 * 1000 // 30 seconds — refreshes when projects change
+  });
 
-  const clients = useMemo(() => {
-    const names = projects.map((p: Project) => p.clientName);
-    return Array.from(new Set(names)).sort();
-  }, [projects]);
+  const clients = clientNames;
 
 
 
@@ -645,7 +666,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <>
       <AppContext.Provider value={{
-        currentUser, users, projects, scores, clients, isLoading, setCurrentUser,
+        currentUser, users, projects, projectStats, scores, clients, isLoading, isAuthenticating, setCurrentUser, setAuthenticating,
         addProject, updateProject, addUser, updateUser, deleteUser, logout, addComment, archiveProject, unarchiveProject, advanceStage, recordQAFeedback, regressToDev, getDevRankings,
         bulkUpdateStage, bulkAssignUser, bulkArchiveProjects, bulkDeleteProjects, deleteProject,
         notifications, addNotification, markNotificationAsRead, markAllNotificationsAsRead, clearAllNotifications,

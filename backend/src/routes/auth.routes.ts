@@ -3,24 +3,30 @@ import { login, requestPasswordReset, resetPassword, changePassword, logout } fr
 import { authenticateToken } from '../middleware/auth.middleware';
 
 import { rateLimit } from 'express-rate-limit';
+import { createLimiterStore } from '../config/limiterStore';
 
 const router = Router();
 
 // Dedicated limiter for login endpoint to prevent brute-force
+// Raised from 10 → 100 to support up to 50 users sharing one LAN/NAT IP.
+// Still blocks automated brute-force which attempt thousands per window.
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 10, // 10 attempts per window
+    max: 100, // 100 attempts per window from a shared IP
     standardHeaders: true,
     legacyHeaders: false,
+    store: createLimiterStore('rl_login'),
     message: { error: 'Too many login attempts, please try again later.' }
 });
 
 // Dedicated limiter for password reset endpoints to prevent brute-force
+// Raised from 5 → 50 to cover LAN scenario where multiple users may request resets.
 const passwordResetLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 5, // Strict limit: 5 attempts
+    limit: 50, // 50 attempts per shared IP window
     standardHeaders: 'draft-7',
     legacyHeaders: false,
+    store: createLimiterStore('rl_reset'),
     message: { error: 'Too many password reset attempts, please try again later.' }
 });
 

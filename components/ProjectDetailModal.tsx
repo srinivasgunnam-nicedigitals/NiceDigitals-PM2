@@ -19,6 +19,7 @@ import { format, parseISO } from 'date-fns';
 import { TeamTab } from './TeamTab';
 import { ChangeDeadlineModal } from './ChangeDeadlineModal';
 import { ReassignLeadModal } from './ReassignLeadModal';
+import { EditProjectModal } from './EditProjectModal';
 
 interface ProjectDetailModalProps {
   project: Project;
@@ -164,9 +165,23 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
   // Phase 2A modal states
   const [showDeadlineModal, setShowDeadlineModal] = useState(false);
   const [showReassignModal, setShowReassignModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Manual Add Task state
   const [newTaskText, setNewTaskText] = useState('');
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showDeadlineModal || showReassignModal || showEditModal || showLinkInput) return;
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, showDeadlineModal, showReassignModal, showEditModal, showLinkInput]);
 
   useEffect(() => {
     const sanitized = sanitizeScopeHtml(project.scope);
@@ -174,7 +189,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     if (editorRef.current) {
       editorRef.current.innerHTML = sanitized;
     }
-  }, [project.scope]);
+  }, [project.scope, activeTab]);
 
   const saveSelection = () => {
     const selection = window.getSelection();
@@ -440,6 +455,14 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
               {currentUser?.role === UserRole.ADMIN && (
                 <>
                   <button
+                    onClick={() => setShowEditModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-900/20 text-slate-600 dark:text-slate-400 text-[11px] font-bold uppercase tracking-wider rounded-lg hover:bg-slate-100 dark:hover:bg-slate-900/40 transition-all border border-slate-200 dark:border-slate-800/50"
+                    title="Edit Project"
+                  >
+                    <Edit3 size={14} />
+                    Edit Project
+                  </button>
+                  <button
                     onClick={() => setShowDeadlineModal(true)}
                     className="flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold uppercase tracking-wider rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-all border border-indigo-200 dark:border-indigo-800/50"
                     title="Change Deadline"
@@ -468,28 +491,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                 </button>
               )}
 
-              {currentUser?.role === UserRole.ADMIN && project.stage !== ProjectStage.COMPLETED && (
-                <button
-                  onClick={async () => {
-                    const confirmed = await showConfirm({
-                      title: 'Archive Project',
-                      message: 'Are you sure you want to archive this project? It will be moved to the archive.',
-                      confirmText: 'Archive',
-                      cancelText: 'Cancel',
-                      variant: 'warning'
-                    });
-                    if (confirmed) {
-                      archiveProject(project.id);
-                      onClose();
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 text-[11px] font-black uppercase tracking-widest rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-all border border-amber-200 dark:border-amber-800/50"
-                  title="Move to Archive"
-                >
-                  <Archive size={14} />
-                  Archive Project
-                </button>
-              )}
+
 
               <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex gap-1 ring-1 ring-slate-200 dark:ring-slate-700">
                 {[
@@ -575,7 +577,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-6 group/header">
                   <h3 className="text-[14px] font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-3">
                     <span className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400"><CheckCircle size={16} /></span>
-                    Phase Completion Checklist
+                    {STAGE_CONFIG[project.stage]?.label ? `${STAGE_CONFIG[project.stage].label} CHECKLIST`.toUpperCase() : 'PHASE COMPLETION CHECKLIST'}
                   </h3>
                   <div className="flex items-center gap-4">
                     {currentUser?.role === UserRole.ADMIN && items.length > 0 && project.stage !== ProjectStage.UPCOMING && (
@@ -587,10 +589,12 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                         <Trash2 size={16} />
                       </button>
                     )}
-                    <div className="flex flex-col items-end">
-                      <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{items.filter(i => i.completed).length} / {items.length}</span>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-1">Verified Actions</span>
-                    </div>
+                    {project.stage !== ProjectStage.UPCOMING && (
+                      <div className="flex flex-col items-end">
+                        <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{items.filter(i => i.completed).length} / {items.length}</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-1">Verified Actions</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -744,7 +748,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                         onClick={() => advanceStage(project.id, nextStage, currentUser!.id)}
                         className="w-full py-4 bg-indigo-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
                       >
-                        Advance to {STAGE_CONFIG[nextStage].label} <ChevronRight size={18} />
+                        Move to {STAGE_CONFIG[nextStage].label} <ChevronRight size={18} />
                       </button>
                     ) : null)
                   ) : (
@@ -792,6 +796,8 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
   return (
     <>
       {createPortal(modalContent, document.body)}
+
+      {showEditModal && <EditProjectModal project={project} onClose={() => setShowEditModal(false)} />}
 
       {/* Phase 2A Modals — must also be portaled to document.body to render above everything */}
       {showDeadlineModal && createPortal(

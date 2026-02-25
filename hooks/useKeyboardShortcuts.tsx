@@ -34,6 +34,16 @@ export const useKeyboardShortcuts = (
             return;
         }
 
+        // Ignore global shortcuts if an application modal is open.
+        // All modals and full-screen overlays in this app use the 'fixed inset-0' classes.
+        // We still want Escape to work, but child modals handle Escape locally via their own useEffects,
+        // and the only global action that uses Escape is the command palette config, which we might want
+        // to still work if the command palette is open. However, if 'fixed inset-0' exists, 
+        // CommandPalette is already handling its own Escape. Other global shortcuts (like 'N') should be disabled.
+        if (document.querySelector('.fixed.inset-0')) {
+            return;
+        }
+
         // Check single-key shortcuts
         for (const shortcut of shortcuts) {
             const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase();
@@ -97,7 +107,7 @@ export const KEYBOARD_SHORTCUTS = {
         { keys: ['G', 'P'], description: 'Go to Pipeline' },
         { keys: ['G', 'T'], description: 'Go to Team' },
         { keys: ['G', 'L'], description: 'Go to Leaderboard' },
-        { keys: ['G', 'A'], description: 'Go to Archive' },
+        { keys: ['G', 'C'], description: 'Go to Completed Projects' },
     ],
     actions: [
         { keys: ['N'], description: 'New Project' },

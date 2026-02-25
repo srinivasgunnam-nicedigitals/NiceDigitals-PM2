@@ -19,6 +19,19 @@ export const ImageCropModal: React.FC<ImageCropModalProps> = ({ imageSrc, onSave
     const [imageDimensions, setImageDimensions] = useState({ width: 0, height: 0 });
     const imageRef = useRef<HTMLImageElement | null>(null);
 
+    // Escape Key Listener
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onCancel();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onCancel]);
+
     // Load image
     useEffect(() => {
         const img = new Image();

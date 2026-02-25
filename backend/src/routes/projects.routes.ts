@@ -13,6 +13,8 @@ router.use(authenticateToken);
 router.post('/batch', batchController.batchUpdateProjects);
 
 // CRUD operations
+router.get('/stats', projectsController.getProjectStats);
+router.get('/client-names', projectsController.getClientNames);
 router.get('/', projectsController.getProjects);
 router.get('/:id', projectsController.getProject);
 

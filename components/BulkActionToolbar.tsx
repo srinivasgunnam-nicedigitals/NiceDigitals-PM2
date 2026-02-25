@@ -147,16 +147,7 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
                             )}
                         </div>
 
-                        {/* Archive */}
-                        {currentUser?.role === UserRole.ADMIN && (
-                            <button
-                                onClick={onBulkArchive}
-                                className="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-900 dark:text-slate-100 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 whitespace-nowrap"
-                            >
-                                <Archive size={16} />
-                                Archive
-                            </button>
-                        )}
+
 
                         {/* Delete */}
                         {currentUser?.role === UserRole.ADMIN && (

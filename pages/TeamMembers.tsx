@@ -10,6 +10,7 @@ const AddUserModal = ({ onClose }: { onClose: () => void }) => {
   const { addUser } = useApp();
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
     email: '',
     password: '',
     role: UserRole.DESIGNER
@@ -50,6 +51,20 @@ const AddUserModal = ({ onClose }: { onClose: () => void }) => {
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-slate-900 dark:text-slate-100"
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1.5">Username</label>
+            <div className="relative">
+              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                required
+                type="text"
+                placeholder="janedoe"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-slate-900 dark:text-slate-100 placeholder:opacity-50"
+                value={formData.username}
+                onChange={e => setFormData({ ...formData, username: e.target.value })}
               />
             </div>
           </div>
@@ -110,6 +125,7 @@ const AddUserModal = ({ onClose }: { onClose: () => void }) => {
 const EditUserModal = ({ user, onClose, onSave }: { user: User; onClose: () => void; onSave: (userId: string, updates: Partial<User>) => void }) => {
   const [formData, setFormData] = useState({
     name: user.name,
+    username: user.username || '',
     email: user.email,
     role: user.role
   });
@@ -145,6 +161,19 @@ const EditUserModal = ({ user, onClose, onSave }: { user: User; onClose: () => v
                 className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-slate-900 dark:text-slate-100"
                 value={formData.name}
                 onChange={e => setFormData({ ...formData, name: e.target.value })}
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-1.5">Username</label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">@</span>
+              <input
+                type="text"
+                placeholder="janedoe123"
+                className="w-full pl-8 pr-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-slate-900 dark:text-slate-100"
+                value={formData.username}
+                onChange={e => setFormData({ ...formData, username: e.target.value })}
               />
             </div>
           </div>
@@ -231,7 +260,7 @@ const TeamMembers = () => {
     <div className="p-8 space-y-12 animate-in fade-in duration-500 pb-20">
       <div className="flex justify-between items-end">
         <div>
-          <h2 className="text-[24px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">Team Roster</h2>
+          <h2 className="text-[24px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">Team Members</h2>
           <p className="text-slate-500 dark:text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Resource planning and team management</p>
         </div>
         {currentUser?.role === UserRole.ADMIN && (
@@ -248,18 +277,18 @@ const TeamMembers = () => {
 
       {/* Resource Utilization Table - At Top */}
       <div className="space-y-4">
-        <div className="flex items-center gap-3 mb-2 px-2">
+        {/* <div className="flex items-center gap-3 mb-2 px-2">
           <BarChart3 className="w-5 h-5 text-indigo-500" />
           <h3 className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-widest">Resource Capacity Tracking</h3>
-        </div>
+        </div> */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
           <table className="w-full text-left border-collapse">
             <thead className="bg-indigo-50/50 dark:bg-slate-900/30">
               <tr>
-                <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest">Resource Name</th>
-                <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest">Specialization</th>
+                <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest">Name</th>
+                <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest">Designation</th>
                 <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center">Active Projects</th>
-                <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Utilization</th>
+                <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 dark:text-slate-500 uppercase tracking-widest text-right">Progress</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -318,7 +347,7 @@ const TeamMembers = () => {
               <tr className="bg-slate-50/50 dark:bg-slate-900/30 border-b border-slate-200 dark:border-slate-700">
                 <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest">User Profile</th>
                 <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Authority Role</th>
-                <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Presence</th>
+                <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest">Username</th>
                 <th className="px-8 py-5 text-[10px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest text-right">Actions</th>
               </tr>
             </thead>
@@ -330,7 +359,7 @@ const TeamMembers = () => {
                       <img src={user.avatar} className="w-10 h-10 rounded-full border border-slate-200 dark:border-slate-600 shadow-sm" alt="" />
                       <div>
                         <p className="font-black text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 transition-colors tracking-tight">{user.name}</p>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1">
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold flex items-center gap-1 mt-0.5">
                           <Mail className="w-3 h-3" /> {user.email}
                         </p>
                       </div>
@@ -347,10 +376,13 @@ const TeamMembers = () => {
                     </div>
                   </td>
                   <td className="px-8 py-5">
-                    <Badge variant="success" size="sm">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      Verified
-                    </Badge>
+                    {user.username ? (
+                      <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-md tracking-wide">
+                        @{user.username}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">Not set</span>
+                    )}
                   </td>
                   <td className="px-8 py-5 text-right">
                     {currentUser?.role === UserRole.ADMIN && (

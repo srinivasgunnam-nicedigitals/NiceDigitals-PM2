@@ -33,13 +33,14 @@ import {
   X,
   Download,
   Calendar,
-  Trash2
+  Trash2,
+  Code
 } from 'lucide-react';
 import { parseISO, format, differenceInDays } from 'date-fns';
 import { STAGE_CONFIG, PRIORITY_CONFIG } from '../constants';
 
 const AdminOverview = () => {
-  const { projects, getDevRankings, isLoading } = useApp();
+  const { projects, projectStats, getDevRankings, isLoading, users } = useApp();
   const { theme } = useTheme();
   const axisColor = theme === 'dark' ? '#cbd5e1' : '#64748b';
   const [chartFilter, setChartFilter] = useState<ProjectStage | null>(null);
@@ -48,11 +49,11 @@ const AdminOverview = () => {
 
   const stageData = useMemo(() => {
     const data: Record<string, number> = {
-      'Upcoming': projects.filter(p => p.stage === ProjectStage.UPCOMING).length,
-      'Design': projects.filter(p => p.stage === ProjectStage.DESIGN).length,
-      'Dev': projects.filter(p => p.stage === ProjectStage.DEVELOPMENT).length,
-      'QA': projects.filter(p => p.stage === ProjectStage.QA).length,
-      'Review': projects.filter(p => p.stage === ProjectStage.ADMIN_REVIEW).length,
+      'Upcoming': projectStats?.upcoming || 0,
+      'Design': projectStats?.design || 0,
+      'Dev': projectStats?.dev || 0,
+      'QA': projectStats?.qa || 0,
+      'Review': projectStats?.review || 0,
     };
 
     const colors: Record<string, string> = {
@@ -64,7 +65,7 @@ const AdminOverview = () => {
     };
 
     return Object.entries(data).map(([name, count]) => ({ name, count, color: colors[name] || '#6366f1' }));
-  }, [projects]);
+  }, [projectStats]);
 
   const handleChartClick = (data: any) => {
     if (data && data.stage) {
@@ -93,15 +94,16 @@ const AdminOverview = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-5 gap-4">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonStat key={i} />)
         ) : (
           [
-            { label: 'Active Pipeline', value: projects.filter(p => p.stage !== ProjectStage.COMPLETED).length, icon: <Activity size={18} />, color: 'text-blue-600', bg: 'bg-blue-50' },
-            { label: 'In Production', value: projects.filter(p => p.stage === ProjectStage.DEVELOPMENT).length, icon: <Zap size={18} />, color: 'text-amber-600', bg: 'bg-amber-50' },
-            { label: 'Attention Req.', value: overdueCount, icon: <AlertIcon size={18} />, color: 'text-red-600', bg: 'bg-red-50' },
-            { label: 'Completed', value: projects.filter(p => p.stage === ProjectStage.COMPLETED).length, icon: <CheckCircle size={18} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+            { label: 'Upcoming Projects', value: projectStats?.upcoming || 0, icon: <Activity size={18} />, color: 'text-blue-600', bg: 'bg-blue-50' },
+            { label: 'In Design', value: projectStats?.design || 0, icon: <Zap size={18} />, color: 'text-amber-600', bg: 'bg-amber-50' },
+            { label: 'In Development', value: projectStats?.dev || 0, icon: <Code size={18} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+            { label: 'Overdue Projects', value: projectStats?.delayed || 0, icon: <AlertIcon size={18} />, color: 'text-red-600', bg: 'bg-red-50' },
+            { label: 'Completed', value: projectStats?.completed || 0, icon: <CheckCircle size={18} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
           ].map((stat, i) => (
             <div key={i} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200/60 dark:border-slate-700 shadow-sm flex items-center justify-between">
               <div>
@@ -121,7 +123,7 @@ const AdminOverview = () => {
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <BarChart3 size={16} className="text-slate-400" /> Allocation Distribution
+                <BarChart3 size={16} className="text-slate-400" /> Distribution
               </h3>
               {chartFilter && (
                 <Button
@@ -182,14 +184,14 @@ const AdminOverview = () => {
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Trophy size={16} className="text-amber-500" /> Top Contributors
+              <Trophy size={16} className="text-amber-500" /> Leaderboard
             </h3>
           </div>
           <div className="space-y-4">
             {rankings.slice(0, 4).map((rank, i) => (
               <div key={rank.userId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                 <span className="text-[11px] font-bold text-slate-400 w-4">0{i + 1}</span>
-                <img src={`https://picsum.photos/seed/${rank.userId}/32/32`} className="w-8 h-8 rounded-md" alt="" />
+                <img src={users.find(u => u.id === rank.userId)?.avatar || `https://picsum.photos/seed/${rank.userId}/32/32`} className="w-8 h-8 rounded-md" alt="" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate">{rank.userName}</p>
                   <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
@@ -215,14 +217,30 @@ interface KanbanColumnProps {
 }
 
 const KanbanColumn = ({ stage, projects, onProjectClick, onAddProject }: KanbanColumnProps) => {
-  const { archiveProject, currentUser, deleteProject } = useApp();
+  const { archiveProject, currentUser, deleteProject, projectStats } = useApp();
   const { showConfirm, showPrompt } = useModal();
+
+  const getStageCount = () => {
+    if (!projectStats) return projects.length;
+    switch (stage) {
+      case ProjectStage.UPCOMING: return projectStats.upcoming;
+      case ProjectStage.DESIGN: return projectStats.design;
+      case ProjectStage.DEVELOPMENT: return projectStats.dev;
+      case ProjectStage.QA: return projectStats.qa;
+      case ProjectStage.ADMIN_REVIEW: return projectStats.review;
+      case ProjectStage.COMPLETED: return projectStats.completed;
+      default: return projects.length;
+    }
+  };
+
+  const globalCount = getStageCount();
+
   return (
     <div className="min-w-[300px] w-full flex flex-col group/col">
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex items-center gap-2">
           <h3 className="text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{STAGE_CONFIG[stage].label}</h3>
-          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">{projects.length}</span>
+          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">{globalCount}</span>
         </div>
         {currentUser?.role === UserRole.ADMIN && (
           <button
@@ -261,27 +279,7 @@ const KanbanColumn = ({ stage, projects, onProjectClick, onAddProject }: KanbanC
                 <h4 className="text-[13px] font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate flex-1 min-w-0">{project.name}</h4>
                 {project.stage !== ProjectStage.COMPLETED && (
                   <>
-                    {currentUser?.role === UserRole.ADMIN && (
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const confirmed = await showConfirm({
-                            title: 'Archive Project',
-                            message: 'Are you sure you want to archive this project? It will be moved to the archive.',
-                            variant: 'warning',
-                            confirmText: 'Archive',
-                            cancelText: 'Cancel'
-                          });
-                          if (confirmed) {
-                            archiveProject(project.id);
-                          }
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all ml-2"
-                        title="Archive Project"
-                      >
-                        <Archive size={14} />
-                      </button>
-                    )}
+
                     {currentUser?.role === UserRole.ADMIN && (
                       <button
                         onClick={async (e) => {
@@ -446,22 +444,7 @@ const RoleSpecificDashboard = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {filteredProjects.length > 0 && (
-              <Button
-                variant="secondary"
-                size="md"
-                onClick={toggleSelectAll}
-              >
-                {selectedProjects.size === filteredProjects.length && selectedProjects.size > 0 ? (
-                  <CheckSquare size={18} className="text-indigo-600" />
-                ) : (
-                  <Square size={18} className="text-slate-400" />
-                )}
-                <span className="text-sm font-semibold">
-                  {selectedProjects.size > 0 ? `${selectedProjects.size} selected` : 'Select All'}
-                </span>
-              </Button>
-            )}
+
 
             <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
               <button
@@ -536,7 +519,7 @@ const RoleSpecificDashboard = () => {
       <div className="sticky bottom-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 p-4 shadow-lg z-20">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-            Showing page <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.page}</span> of <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.totalPages}</span>
+            Showing page <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.total === 0 ? 0 : paginationMeta.page}</span> of <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.totalPages}</span>
             <span className="mx-2">•</span>
             Total <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.total}</span> projects
           </span>

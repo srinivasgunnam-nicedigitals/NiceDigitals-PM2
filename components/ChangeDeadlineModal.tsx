@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { backendApi } from '../services/api';
 import { Project } from '../types';
@@ -16,6 +16,18 @@ export const ChangeDeadlineModal: React.FC<ChangeDeadlineModalProps> = ({ projec
     const [confirmed, setConfirmed] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                onClose();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose]);
 
     const isValid = () => {
         if (!newDeadline) return false;

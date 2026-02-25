@@ -22,6 +22,7 @@ import {
   Layers,
   Newspaper,
   Menu,
+  CheckCircle,
   X as CloseIcon
 } from 'lucide-react';
 import Dashboard from '../pages/Dashboard';
@@ -35,6 +36,7 @@ import { KeyboardShortcutsHelp } from './KeyboardShortcutsHelp';
 import { CommandPalette } from './CommandPalette';
 import { AddProjectModal } from './AddProjectModal';
 import { SettingsModal } from './SettingsModal';
+import { ProjectDetailModal } from './ProjectDetailModal';
 import { Button } from './ui';
 
 interface SidebarItemProps {
@@ -137,9 +139,9 @@ export const Layout: React.FC = () => {
         description: 'Go to Leaderboard',
       },
       {
-        keys: ['g', 'a'],
+        keys: ['g', 'c'],
         callback: () => navigate('/archive'),
-        description: 'Go to Archive',
+        description: 'Go to Completed Projects',
       },
     ]
   );
@@ -163,8 +165,8 @@ export const Layout: React.FC = () => {
             <div className="w-8 h-8 shrink-0 bg-slate-900 dark:bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm ring-1 ring-white/20">N</div>
             {!desktopSidebarCollapsed && (
               <div className="flex flex-col flex-1 overflow-hidden">
-                <h1 className="font-bold text-[14px] leading-none text-slate-900 dark:text-slate-100 truncate">Nice Workspace</h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 truncate">Premium Plan</p>
+                <h1 className="font-bold text-[14px] leading-none text-slate-900 dark:text-slate-100 truncate">Nice Digitals</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 truncate">PM Tool</p>
               </div>
             )}
             {/* Desktop Collapse Toggle */}
@@ -222,7 +224,7 @@ export const Layout: React.FC = () => {
             {currentUser?.role === UserRole.ADMIN && (
               <SidebarItem
                 icon={<Users />}
-                label="Team Roster"
+                label="Team Members"
                 isActive={currentPath === '/team'}
                 onClick={() => navigate('/team')}
                 isCollapsed={desktopSidebarCollapsed}
@@ -236,8 +238,8 @@ export const Layout: React.FC = () => {
               isCollapsed={desktopSidebarCollapsed}
             />
             <SidebarItem
-              icon={<Archive />}
-              label="Archive"
+              icon={<CheckCircle />}
+              label="Completed Projects"
               isActive={currentPath === '/archive'}
               onClick={() => navigate('/archive')}
               isCollapsed={desktopSidebarCollapsed}
@@ -311,10 +313,13 @@ export const Layout: React.FC = () => {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
               <input
                 type="text"
+                readOnly
+                onClick={() => setShowCommandPalette(true)}
+                onFocus={() => setShowCommandPalette(true)}
                 placeholder="Search everything..."
-                className="w-full pl-10 pr-12 py-2 bg-slate-100/50 dark:bg-slate-800/50 border border-transparent rounded-xl text-[13px] font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500/50 transition-all shadow-sm group-hover:bg-slate-100 dark:group-hover:bg-slate-800"
+                className="w-full pl-10 pr-12 py-2 bg-slate-100/50 dark:bg-slate-800/50 border border-transparent rounded-xl text-[13px] font-medium placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white dark:focus:bg-slate-800 focus:border-indigo-500/50 transition-all shadow-sm group-hover:bg-slate-100 dark:group-hover:bg-slate-800 cursor-pointer"
               />
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-400 font-black hidden sm:block shadow-sm">⌘K</div>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-400 font-black hidden sm:block shadow-sm pointer-events-none">Ctrl K</div>
             </div>
           </div>
 
@@ -369,6 +374,12 @@ export const Layout: React.FC = () => {
             setShowAddProjectModal(true);
             setShowCommandPalette(false);
           }}
+        />
+      )}
+      {selectedProject && (
+        <ProjectDetailModal
+          project={selectedProject}
+          onClose={() => setSelectedProject(null)}
         />
       )}
     </div>

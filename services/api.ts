@@ -39,13 +39,17 @@ api.interceptors.response.use(
     (error) => {
         if (error.response && error.response.status === 401) {
             // Token is invalid or expired.
-            // With HttpOnly cookies, we can't clear the token client-side,
-            // but the server should have cleared it or it's invalid anyway.
-            localStorage.removeItem('nice_digital_current_user_v4'); // Clear user cache if preferred
+            // Check if we are currently in the AUTHENTICATING state machine window.
+            // If so, ignore transient 401s (race condition before cookie commits).
+            const isAuthenticating = window.sessionStorage.getItem('is_authenticating') === 'true';
 
-            // Prevent infinite redirect loop if already on login
-            if (!window.location.pathname.includes('/login')) {
-                window.location.href = '/login';
+            if (!isAuthenticating) {
+                // Hard reset only if we were supposed to be fully AUTHENTICATED
+                localStorage.removeItem('nice_digital_current_user_v4');
+
+                if (!window.location.pathname.includes('/login')) {
+                    window.location.href = '/login';
+                }
             }
         }
 
@@ -102,10 +106,38 @@ export const backendApi = {
         return response.data;
     },
 
+    // Activity Feed — global, tenant-scoped, sorted by timestamp desc
+    getActivityFeed: async (limit = 100): Promise<Array<{
+        id: string;
+        stage: string;
+        action: string;
+        timestamp: string;
+        userId: string | null;
+        projectId: string | null;
+        projectName: string;
+    }>> => {
+        const response = await api.get(`activity?limit=${limit}`);
+        return response.data;
+    },
+
     // Projects
-    getProjects: async (page = 1, limit = 10) => {
-        const response = await api.get<{ data: Project[], meta: any }>(`projects?page=${page}&limit=${limit}`);
+    getProjects: async (page = 1, limit = 10, filters?: { status?: string; priority?: string; clientName?: string }) => {
+        const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+        if (filters?.status) params.set('status', filters.status);
+        if (filters?.priority) params.set('priority', filters.priority);
+        if (filters?.clientName) params.set('clientName', filters.clientName);
+        const response = await api.get<{ data: Project[], meta: any }>(`projects?${params.toString()}`);
         return response.data; // Returns { data: [...], meta: {...} }
+    },
+
+    getProjectStats: async () => {
+        const response = await api.get<{ upcoming: number, design: number, dev: number, qa: number, review: number, completed: number, delayed: number, totalActive: number }>('projects/stats');
+        return response.data;
+    },
+
+    getClientNames: async (): Promise<string[]> => {
+        const response = await api.get<string[]>('projects/client-names');
+        return response.data;
     },
 
     getProject: async (id: string) => {

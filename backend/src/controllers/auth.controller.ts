@@ -24,12 +24,17 @@ export const login = async (req: Request, res: Response) => {
         const { email, password } = req.body;
 
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email and password are required' });
+            return res.status(400).json({ error: 'Email/Username and password are required' });
         }
 
         // 1. Find User (or simulate find)
-        const user = await prisma.user.findUnique({
-            where: { email }
+        const user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: email },
+                    { username: email }
+                ]
+            }
         });
 
         // 2. Validate Password (ALWAYS execute compare to prevent timing attacks)
@@ -302,7 +307,7 @@ export const changePassword = async (req: Request, res: Response) => {
         // Verify current password
         const isValidCurrentPassword = await passwordService.compare(currentPassword, user.password);
         if (!isValidCurrentPassword) {
-            return res.status(401).json({ error: 'Current password is incorrect' });
+            return res.status(400).json({ error: 'Current password is incorrect' });
         }
 
         // Hash new password
@@ -326,6 +331,25 @@ export const changePassword = async (req: Request, res: Response) => {
                 actorEmail: user.email,
                 tenantId: user.tenantId
             }, tx);
+        });
+
+        // Issue new token since lastRevocationAt was updated
+        const token = jwt.sign(
+            {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                tenantId: user.tenantId
+            },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
         });
 
         res.json({ message: 'Password changed successfully' });

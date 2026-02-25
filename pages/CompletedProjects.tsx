@@ -36,15 +36,15 @@ const CompletedProjects = () => {
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500 pb-12">
       <div>
-        <h2 className="text-[24px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">Archive Vault</h2>
+        <h2 className="text-[24px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">Completed Projects</h2>
         <p className="text-slate-500 dark:text-slate-400 font-medium mt-1 uppercase tracking-widest text-xs">Closed & Successfully Delivered Projects</p>
       </div>
 
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
         {completedProjects.length === 0 ? (
           <EmptyState
-            icon={Archive}
-            title="Archive Empty"
+            icon={CheckCircle}
+            title="No Completed Projects"
             description="No projects have been marked as completed yet."
           />
         ) : (

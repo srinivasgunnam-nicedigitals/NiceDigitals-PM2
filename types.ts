@@ -27,6 +27,7 @@ export enum Priority {
 export interface User {
   id: string;
   name: string;
+  username?: string;
   email: string;
   password?: string; // New password field
   role: UserRole;
@@ -101,8 +102,9 @@ export interface DevPerformance {
   totalPoints: number;
   monthlyPoints: number;
   completedProjects: number;
-  qaFailureRate: number;
-  onTimeDeliveryRate: number;
+  qaFirstTimeRightRate: number | null; // null = no QA data yet (never showed 100% falsely)
+  onTimeDeliveryRate: number | null;   // null = no completed projects yet
+  hasData: boolean;                    // false = zero assigned projects
 }
 
 // Phase 2A: Team member types

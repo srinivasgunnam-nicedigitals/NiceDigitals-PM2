@@ -29,6 +29,38 @@ const sanitizeScopeHtml = (html: string) => {
         .replace(/javascript:/gi, '');
 };
 
+export const getProjectStats = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const tenantId = req.user?.tenantId;
+        if (!tenantId) {
+            throw AppError.unauthorized('Unauthorized: No tenant', 'NO_TENANT');
+        }
+
+        const [upcoming, design, dev, qa, review, completed, delayed] = await Promise.all([
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.UPCOMING } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.DESIGN } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.DEVELOPMENT } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.QA } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.ADMIN_REVIEW } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.COMPLETED } }),
+            prisma.project.count({ where: { tenantId, isDelayed: true, stage: { not: ProjectStage.COMPLETED } } }),
+        ]);
+
+        res.json({
+            upcoming,
+            design,
+            dev,
+            qa,
+            review,
+            completed,
+            delayed,
+            totalActive: upcoming + design + dev + qa + review
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
@@ -41,9 +73,21 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
         const limit = Math.min(parseInt(req.query.limit as string) || 50, MAX_LIMIT);
         const skip = (page - 1) * limit;
 
+        // Optional filter params — only applied when present
+        const statusFilter = req.query.status as string | undefined;
+        const priorityFilter = req.query.priority as string | undefined;
+        const clientNameFilter = req.query.clientName as string | undefined;
+
+        const whereClause: Prisma.ProjectWhereInput = {
+            tenantId,
+            ...(statusFilter && { stage: statusFilter as ProjectStage }),
+            ...(priorityFilter && { priority: priorityFilter as any }),
+            ...(clientNameFilter && { clientName: clientNameFilter }),
+        };
+
         const [projects, total] = await Promise.all([
             prisma.project.findMany({
-                where: { tenantId },
+                where: whereClause,
                 // Optimized for list view: Exclude heavy relations
                 select: {
                     id: true,
@@ -80,7 +124,7 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
                 skip,
                 take: limit
             }),
-            prisma.project.count({ where: { tenantId } })
+            prisma.project.count({ where: whereClause })
         ]);
 
         const today = startOfDay(new Date());
@@ -404,6 +448,15 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                         if (['designChecklist', 'devChecklist', 'qaChecklist', 'finalChecklist'].includes(key)) {
                             updateFields.push(`"${key}" = $${paramIndex}::jsonb[]`);
                             updateValues.push(Array.isArray(value) ? value.map((x: any) => JSON.stringify(x)) : []);
+                        } else if (key === 'priority') {
+                            updateFields.push(`"${key}" = $${paramIndex}::"Priority"`);
+                            updateValues.push(value);
+                        } else if (key === 'stage') {
+                            updateFields.push(`"${key}" = $${paramIndex}::"ProjectStage"`);
+                            updateValues.push(value);
+                        } else if (key === 'overallDeadline' || key === 'currentDeadline') {
+                            updateFields.push(`"${key}" = $${paramIndex}::timestamp`);
+                            updateValues.push(value);
                         } else {
                             updateFields.push(`"${key}" = $${paramIndex}`);
                             updateValues.push(value);
@@ -840,6 +893,29 @@ export const getProjectComments = async (req: Request, res: Response, next: Next
             data: comments,
             meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
         });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// GET /api/projects/client-names
+// Returns all unique, globally complete client names for the current tenant.
+// This is scoped to the tenant and does NOT use pagination, ensuring the
+// client filter dropdown in the UI is always complete regardless of page.
+export const getClientNames = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const tenantId = req.user?.tenantId;
+        if (!tenantId) throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
+
+        const result = await prisma.project.findMany({
+            where: { tenantId },
+            select: { clientName: true },
+            distinct: ['clientName'],
+            orderBy: { clientName: 'asc' }
+        });
+
+        const names = result.map(r => r.clientName).filter(Boolean);
+        res.json(names);
     } catch (error) {
         next(error);
     }

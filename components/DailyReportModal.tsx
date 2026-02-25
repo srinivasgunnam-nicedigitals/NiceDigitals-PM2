@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useApp } from '../store';
 import { Project, UserRole, ProjectStage } from '../types';
 import { STAGE_CONFIG } from '../constants';
@@ -13,6 +13,18 @@ interface DailyReportModalProps {
 
 export const DailyReportModal: React.FC<DailyReportModalProps> = ({ onClose }) => {
   const { projects, currentUser } = useApp();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const activeProjects = projects.filter(p => {
     if (p.stage === ProjectStage.COMPLETED) return false;

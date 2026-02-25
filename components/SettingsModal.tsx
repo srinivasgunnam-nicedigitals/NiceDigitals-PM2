@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, User, Bell, Shield, Moon, Sun, LogOut, Check, Upload, Key, Eye, EyeOff } from 'lucide-react';
+import { X, User, Bell, Shield, Moon, Sun, LogOut, Check, Upload, Key, Eye, EyeOff, Camera, Trash2 } from 'lucide-react';
 import { useApp } from '../store';
 import { backendApi } from '../services/api';
 import { useTheme } from '../ThemeContext';
@@ -13,7 +13,7 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
-    const { currentUser, setCurrentUser } = useApp();
+    const { currentUser, setCurrentUser, logout } = useApp();
     const { theme, toggleTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'security' | 'general'>('profile');
 
@@ -51,6 +51,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (showCropModal) return; // Let the child handling its own escape
+                e.preventDefault();
+                onClose();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose, showCropModal]);
 
     const handleSave = async () => {
         if (!currentUser) return;
@@ -175,8 +188,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                         {activeTab === 'profile' && (
                             <div className="space-y-8">
                                 <div className="flex items-center gap-6">
-                                    <img src={formData.avatar} alt="" className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-700 shadow-lg object-cover" />
-                                    <div>
+                                    <div className="relative group rounded-full">
+                                        <img src={formData.avatar} alt="" className="w-24 h-24 rounded-full border-4 border-slate-100 dark:border-slate-700 shadow-lg object-cover" />
+
+                                        {/* Hover Overlay */}
+                                        <div className="absolute inset-0 bg-slate-900/60 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[2px]">
+                                            <button
+                                                type="button"
+                                                onClick={() => fileInputRef.current?.click()}
+                                                className="p-1.5 bg-white/20 hover:bg-white/40 rounded-full text-white transition-colors"
+                                                title="Upload new photo"
+                                            >
+                                                <Camera size={16} />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const defaultAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=random`;
+                                                    setFormData(prev => ({ ...prev, avatar: defaultAvatarUrl }));
+                                                }}
+                                                className="p-1.5 bg-red-500/80 hover:bg-red-500 rounded-full text-white transition-colors"
+                                                title="Remove photo"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+
+                                        {/* Hidden File Input */}
                                         <input
                                             ref={fileInputRef}
                                             type="file"
@@ -184,15 +222,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                             onChange={handleFileSelect}
                                             className="hidden"
                                         />
-                                        <Button
-                                            variant="secondary"
-                                            size="sm"
-                                            onClick={() => fileInputRef.current?.click()}
-                                            className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
-                                        >
-                                            <Upload size={14} />
-                                            Change Avatar
-                                        </Button>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">{formData.name || 'Your Profile'}</h3>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">Update your photo and personal details.</p>
                                     </div>
                                 </div>
 
@@ -453,8 +486,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                         variant="danger"
                                         size="md"
                                         onClick={() => {
-                                            setCurrentUser(null);
-                                            onClose();
+                                            logout();
                                         }}
                                         fullWidth
                                     >

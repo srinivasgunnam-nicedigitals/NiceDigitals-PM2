@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { ResetPasswordModal } from '../components/ResetPasswordModal';
 
 export const Login = () => {
-    const { setCurrentUser } = useApp();
+    const { setCurrentUser, setAuthenticating } = useApp();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -21,10 +21,21 @@ export const Login = () => {
         setError('');
 
         try {
+            // 1. Mark as authenticating (blocks queries and 401 interceptor)
+            setAuthenticating(true);
+            window.sessionStorage.setItem('is_authenticating', 'true');
+
+            // 2. Perform login and set user
             const { user } = await backendApi.login(email, password);
-            // localStorage.setItem('token', token); // Token is now in cookie
             setCurrentUser(user);
-            navigate('/dashboard');
+
+            // 3. Wait one tick for cookie to commit and state to flush, then navigate
+            setTimeout(() => {
+                navigate('/dashboard');
+                // 4. Release the query block and interceptor block after navigation
+                setAuthenticating(false);
+                window.sessionStorage.removeItem('is_authenticating');
+            }, 50);
         } catch (err: any) {
             console.error('Login failed', err);
             setError(err.response?.data?.error || 'Login failed');
@@ -83,14 +94,14 @@ export const Login = () => {
 
                     <form onSubmit={handleLogin} className="space-y-6">
                         <div>
-                            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Work Email</label>
+                            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-2 ml-1">Work Email or Username</label>
                             <div className="relative group">
                                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                                 <input
-                                    type="email"
+                                    type="text"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="name@company.com"
+                                    placeholder="name@company.com or username"
                                     className="w-full pl-12 pr-4 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-bold text-slate-900 dark:text-slate-100 transition-all placeholder:font-medium"
                                 />
                             </div>

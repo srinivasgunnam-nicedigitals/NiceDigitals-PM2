@@ -12,13 +12,16 @@ import {
     Archive,
     Plus,
     ArrowRight,
-    Clock
+    Clock,
+    Moon,
+    UserCircle,
 } from 'lucide-react';
+import { useTheme } from '../ThemeContext';
 import { STAGE_CONFIG } from '../constants';
 
 interface CommandItem {
     id: string;
-    type: 'project' | 'navigation' | 'action';
+    type: 'project' | 'navigation' | 'action' | 'user';
     title: string;
     subtitle?: string;
     icon: React.ReactNode;
@@ -39,7 +42,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     onOpenProject,
     onNewProject
 }) => {
-    const { projects } = useApp();
+    const { projects, users } = useApp();
+    const { theme, toggleTheme } = useTheme();
     const [query, setQuery] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -66,7 +70,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         {
             id: 'nav-team',
             type: 'navigation',
-            title: 'Go to Team Roster',
+            title: 'Go to Team Members',
             icon: <Users size={18} />,
             onSelect: () => { onNavigate('/team'); onClose(); },
             keywords: ['team', 'members', 'roster', 'people']
@@ -82,7 +86,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         {
             id: 'nav-archive',
             type: 'navigation',
-            title: 'Go to Archive',
+            title: 'Go to Completed Projects',
             icon: <Archive size={18} />,
             onSelect: () => { onNavigate('/archive'); onClose(); },
             keywords: ['archive', 'completed', 'finished']
@@ -96,8 +100,26 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             onSelect: () => { onNewProject(); onClose(); },
             keywords: ['new', 'create', 'project', 'add']
         },
+        {
+            id: 'action-toggle-theme',
+            type: 'action',
+            title: `Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`,
+            icon: <Moon size={18} />,
+            onSelect: () => { toggleTheme(); onClose(); },
+            keywords: ['theme', 'dark mode', 'light mode', 'appearance', 'toggle']
+        },
+        // User commands
+        ...users.map(user => ({
+            id: `user-${user.id}`,
+            type: 'user' as const,
+            title: user.name,
+            subtitle: user.role.replace('_', ' '),
+            icon: <UserCircle size={18} />,
+            onSelect: () => { onNavigate('/team'); onClose(); },
+            keywords: [user.name.toLowerCase(), user.role.toLowerCase(), 'team', 'member', 'person']
+        })),
         // Project commands
-        ...projects.filter(p => p.stage !== ProjectStage.COMPLETED).map(project => ({
+        ...projects.map(project => ({
             id: `project-${project.id}`,
             type: 'project' as const,
             title: project.name,
@@ -163,7 +185,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [selectedIndex, filteredCommands, onClose]);
+    }, [selectedIndex, filteredCommands.length, onClose]);
 
     // Reset selected index when query changes
     useEffect(() => {
@@ -178,7 +200,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     const typeLabels = {
         navigation: 'Navigation',
         action: 'Actions',
-        project: 'Projects'
+        project: 'Projects',
+        user: 'Team Members'
     };
 
     return (
@@ -231,8 +254,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                                                 onClick={cmd.onSelect}
                                                 onMouseEnter={() => setSelectedIndex(globalIndex)}
                                                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-left ${isSelected
-                                                        ? 'bg-indigo-600 text-white'
-                                                        : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100'
+                                                    ? 'bg-indigo-600 text-white'
+                                                    : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100'
                                                     }`}
                                             >
                                                 <div className={`${isSelected ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`}>

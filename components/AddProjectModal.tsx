@@ -41,8 +41,17 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
     onClose(); // Ensure modal closes
   };
 
-  // ... (useEffect remains the same)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
 
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
   const designers = users.filter(u => u.role === UserRole.DESIGNER);
   const devManagers = users.filter(u => u.role === UserRole.DEV_MANAGER);
 

@@ -50,30 +50,40 @@ export class RankingService {
             const monthlyCompleted = completed.filter(p => p.completedAt && isSameMonth(p.completedAt, today));
             const onTime = completed.filter(p => p.completedAt && p.completedAt <= p.overallDeadline).length;
 
-            const qaFails = devProjects.reduce((acc, p) => acc + (p.qaFailCount || 0), 0);
-             // Logic mirrored from frontend: p.stage !== DESIGN && p.stage !== DEVELOPMENT && p.stage !== UPCOMING
-            const qaPasses = devProjects.filter(p => 
-                p.stage !== 'DESIGN' && 
-                p.stage !== 'DEVELOPMENT' && 
+            // --- ENTERPRISE FIX: First-Time Right (FTR) QA Formula ---
+            // A project "attempted QA" if it progressed past Design/Dev/Upcoming.
+            // A project "passed first-time" if it did so with zero QA failures (qaFailCount === 0).
+            const qaAttempted = devProjects.filter(p =>
+                p.stage !== 'DESIGN' &&
+                p.stage !== 'DEVELOPMENT' &&
                 p.stage !== 'UPCOMING'
-            ).length;
+            );
+            const qaFirstTimePassed = qaAttempted.filter(p => (p.qaFailCount || 0) === 0).length;
+            const totalQA = qaAttempted.length;
 
-            const totalQA = qaPasses + qaFails;
-            const qaFailureRate = totalQA > 0 ? (qaFails / totalQA) * 100 : 0;
-            const onTimeDeliveryRate = completed.length > 0 ? (onTime / completed.length) * 100 : 100;
+            // Return null when there is no data — prevents fake 100% for inactive devs
+            const qaFirstTimeRightRate: number | null = totalQA > 0
+                ? Math.round((qaFirstTimePassed / totalQA) * 100)
+                : null;
+            const onTimeDeliveryRate: number | null = completed.length > 0
+                ? Math.round((onTime / completed.length) * 100)
+                : null;
 
-             return {
+            const hasData = devProjects.length > 0;
+
+            return {
                 userId: dev.id,
                 userName: dev.name,
                 totalPoints,
                 monthlyPoints,
                 completedProjects: monthlyCompleted.length,
-                qaFailureRate,
-                onTimeDeliveryRate
+                qaFirstTimeRightRate,
+                onTimeDeliveryRate,
+                hasData
             };
         });
 
-        // 3. Sort by total points descending
+        // Sort by total points descending
         return rankings.sort((a, b) => b.totalPoints - a.totalPoints);
     }
 }
