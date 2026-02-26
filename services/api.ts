@@ -47,8 +47,8 @@ api.interceptors.response.use(
                 // Hard reset only if we were supposed to be fully AUTHENTICATED
                 localStorage.removeItem('nice_digital_current_user_v4');
 
-                if (!window.location.pathname.includes('/login')) {
-                    window.location.href = '/login';
+                if (!window.location.pathname.includes('/ndpma/login')) {
+                    window.location.href = '/ndpma/login';
                 }
             }
         }
