@@ -248,7 +248,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } finally {
       localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
       setCurrentUser(null);
-      window.location.href = '/login';
+      window.location.href = '/ndpma/login';
     }
   }, []);
 

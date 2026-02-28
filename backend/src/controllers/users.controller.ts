@@ -27,7 +27,7 @@ export const getUsers = async (req: Request, res: Response) => {
         if (!tenantId) return res.status(401).json({ error: 'Unauthorized: No tenant' });
 
         const page = parseInt(req.query.page as string) || 1;
-        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Safety Cap
+        const limit = Math.min(parseInt(req.query.limit as string) || 500, 1000); // Safety Cap
         const skip = (page - 1) * limit;
 
         const [users, total] = await Promise.all([
