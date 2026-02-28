@@ -3,7 +3,9 @@ import React from 'react';
 import { Project, ProjectStage, UserRole, Priority } from '../types';
 import { PRIORITY_CONFIG } from '../constants';
 import { CheckSquare } from 'lucide-react';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
+import { useUsers } from '../hooks/useUsers';
+import { useUpdateProject } from '../hooks/useProjectMutations';
 import { Card, Badge } from './ui';
 
 interface ProjectCardProps {
@@ -12,7 +14,9 @@ interface ProjectCardProps {
 }
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick }) => {
-  const { currentUser, users, updateProject } = useApp();
+  const { currentUser } = useAuth();
+  const { users } = useUsers();
+  const updateProjectMutation = useUpdateProject();
 
   // Calculate checklist progress aggregated across all phases
   const getChecklistProgress = () => {
@@ -41,7 +45,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick }) =>
     const userId = e.target.value;
     if (currentUser?.role === UserRole.ADMIN) {
       // Convert empty string to null to avoid foreign key constraint violations
-      updateProject(project.id, { assignedDesignerId: userId === '' ? null : userId, version: project.version });
+      updateProjectMutation.mutate({ id: project.id, updates: { assignedDesignerId: userId === '' ? null : userId, version: project.version } });
     }
   };
 

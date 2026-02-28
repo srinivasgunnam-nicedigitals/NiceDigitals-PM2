@@ -4,6 +4,36 @@ import jwt from 'jsonwebtoken';
 import { logAudit } from '../utils/audit';
 import { passwordService } from '../services/password.service';
 
+// GET /api/auth/me — Silent token revalidation.
+// Returns the current user from DB, proving the token is still valid.
+// Used by AuthContext on mount to hydrate the user after page refresh.
+export const me = async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        if (!userId) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true, name: true, username: true, email: true,
+                role: true, avatar: true, tenantId: true, isActive: true
+            }
+        });
+
+        if (!user) {
+            return res.status(401).json({ error: 'User not found' });
+        }
+
+        res.json({ user });
+    } catch (error) {
+        console.error('Me endpoint error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+
 const JWT_SECRET = process.env.JWT_SECRET!;
 if (!JWT_SECRET) {
     console.error("JWT_SECRET missing in auth controller");

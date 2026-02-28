@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useApp } from '../store';
+import { useUpdateProject } from '../hooks/useProjectMutations';
+import { useClientNames } from '../hooks/useProjectsQuery';
 import { Priority, Project } from '../types';
 import { X, Calendar, Target, Flag, User } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -11,7 +12,8 @@ interface EditProjectModalProps {
 }
 
 export const EditProjectModal: React.FC<EditProjectModalProps> = ({ project, onClose }) => {
-    const { updateProject, clients } = useApp();
+    const updateProjectMutation = useUpdateProject();
+    const { data: clients = [] } = useClientNames();
     const [formData, setFormData] = useState({
         name: project.name,
         clientName: project.clientName,
@@ -39,12 +41,15 @@ export const EditProjectModal: React.FC<EditProjectModalProps> = ({ project, onC
         e.preventDefault();
         if (!isFormValid) return;
 
-        updateProject(project.id, {
-            name: formData.name,
-            clientName: formData.clientName,
-            priority: formData.priority,
-            overallDeadline: new Date(formData.overallDeadline).toISOString(),
-            version: project.version
+        updateProjectMutation.mutate({
+            id: project.id,
+            updates: {
+                name: formData.name,
+                clientName: formData.clientName,
+                priority: formData.priority,
+                overallDeadline: new Date(formData.overallDeadline).toISOString(),
+                version: project.version
+            }
         });
         onClose();
     };

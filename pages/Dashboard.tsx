@@ -1,6 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useApp } from '../store';
+import { useProjectStats, useDevRankings } from '../hooks/useDashboard';
+import { useProjectsQuery } from '../hooks/useProjectsQuery';
+import { useKanbanQuery, ORDERED_STAGES, KanbanStage } from '../hooks/useKanbanQuery';
+import { useUsers } from '../hooks/useUsers';
+import { useDeleteProject, useBatchProjects } from '../hooks/useProjectMutations';
+import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../ThemeContext';
 import { useModal } from '../hooks/useModal';
 import { UserRole, ProjectStage, Project, Priority } from '../types';
@@ -40,12 +45,14 @@ import { parseISO, format, differenceInDays } from 'date-fns';
 import { STAGE_CONFIG, PRIORITY_CONFIG } from '../constants';
 
 const AdminOverview = () => {
-  const { projects, projectStats, getDevRankings, isLoading, users } = useApp();
+  const { data: projectStats } = useProjectStats();
+  const { data: rankings = [] } = useDevRankings();
+  const { projects, isLoading } = useProjectsQuery(1, 500);
+  const { users } = useUsers();
   const { theme } = useTheme();
   const axisColor = theme === 'dark' ? '#cbd5e1' : '#64748b';
   const [chartFilter, setChartFilter] = useState<ProjectStage | null>(null);
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
-  const rankings = getDevRankings();
 
   const stageData = useMemo(() => {
     const data: Record<string, number> = {
@@ -211,36 +218,30 @@ const AdminOverview = () => {
 interface KanbanColumnProps {
   stage: ProjectStage;
   projects: Project[];
+  total?: number;    // Server-reported total for this stage (for column header)
+  hasMore?: boolean; // True when more cards exist beyond the loaded page
   onProjectClick: (p: Project) => void;
   onAddProject?: (stage: ProjectStage) => void;
   key?: any;
 }
 
-const KanbanColumn = ({ stage, projects, onProjectClick, onAddProject }: KanbanColumnProps) => {
-  const { archiveProject, currentUser, deleteProject, projectStats } = useApp();
+const KanbanColumn = ({ stage, projects, total, hasMore, onProjectClick, onAddProject }: KanbanColumnProps) => {
+  const { currentUser } = useAuth();
+  const deleteProjectMutation = useDeleteProject();
+  const batchProjectsMutation = useBatchProjects();
   const { showConfirm, showPrompt } = useModal();
 
-  const getStageCount = () => {
-    if (!projectStats) return projects.length;
-    switch (stage) {
-      case ProjectStage.UPCOMING: return projectStats.upcoming;
-      case ProjectStage.DESIGN: return projectStats.design;
-      case ProjectStage.DEVELOPMENT: return projectStats.dev;
-      case ProjectStage.QA: return projectStats.qa;
-      case ProjectStage.ADMIN_REVIEW: return projectStats.review;
-      case ProjectStage.COMPLETED: return projectStats.completed;
-      default: return projects.length;
-    }
-  };
-
-  const globalCount = getStageCount();
+  // Use server-reported total (accurate across all pages) or fall back to loaded count
+  const globalCount = total ?? projects.length;
 
   return (
     <div className="min-w-[300px] w-full flex flex-col group/col">
       <div className="flex items-center justify-between mb-3 px-1">
         <div className="flex items-center gap-2">
           <h3 className="text-[12px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{STAGE_CONFIG[stage].label}</h3>
-          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">{globalCount}</span>
+          <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-md">
+            {globalCount}{hasMore ? '+' : ''}
+          </span>
         </div>
         {currentUser?.role === UserRole.ADMIN && (
           <button
@@ -298,7 +299,7 @@ const KanbanColumn = ({ stage, projects, onProjectClick, onAddProject }: KanbanC
                             }
                           });
                           if (confirmation) {
-                            await deleteProject(project.id, confirmation);
+                            await deleteProjectMutation.mutateAsync(project.id);
                           }
                         }}
                         className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all ml-1"
@@ -356,18 +357,27 @@ const KanbanColumn = ({ stage, projects, onProjectClick, onAddProject }: KanbanC
 };
 
 const RoleSpecificDashboard = () => {
-  const { currentUser, projects, isLoading, users, bulkUpdateStage, bulkAssignUser, bulkArchiveProjects, bulkDeleteProjects, page, setPage, paginationMeta } = useApp();
+  const { currentUser } = useAuth();
+  const { board, columns, isLoading } = useKanbanQuery(20);
+  const { users } = useUsers();
+  const batchProjectsMutation = useBatchProjects();
+  const deleteProjectMutation = useDeleteProject();
   const { theme } = useTheme();
   const [viewMode, setViewMode] = useState<'board' | 'grid'>('board');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
 
+  // All loaded items across all stages (for grid view, bulk ops, and modal lookup)
+  const allProjects = useMemo(() => columns.flatMap(c => c.column.items), [columns]);
+  // Total active count across all stages (for scale warning)
+  const totalActive = useMemo(() => columns.reduce((sum, c) => sum + c.column.total, 0), [columns]);
+
   // Access global modal trigger from Layout
   const { onAddProject } = useOutletContext<{ onAddProject: () => void }>();
 
   const selectedProject = useMemo(() =>
-    projects.find(p => p.id === selectedProjectId) || null
-    , [projects, selectedProjectId]);
+    allProjects.find(p => p.id === selectedProjectId) || null
+    , [allProjects, selectedProjectId]);
 
   useKeyboardShortcuts(
     [
@@ -381,13 +391,13 @@ const RoleSpecificDashboard = () => {
   );
 
   const filteredProjects = useMemo(() => {
-    if (currentUser?.role === UserRole.ADMIN) return projects;
-    return projects.filter(p =>
+    if (currentUser?.role === UserRole.ADMIN) return allProjects;
+    return allProjects.filter(p =>
       p.assignedDesignerId === currentUser?.id ||
       p.assignedDevManagerId === currentUser?.id ||
       p.assignedQAId === currentUser?.id
     );
-  }, [projects, currentUser]);
+  }, [allProjects, currentUser]);
 
   const toggleProjectSelection = (projectId: string) => {
     setSelectedProjects(prev => {
@@ -412,30 +422,42 @@ const RoleSpecificDashboard = () => {
   const clearSelection = () => setSelectedProjects(new Set());
 
   const handleBulkStageChange = (stage: ProjectStage) => {
-    bulkUpdateStage(Array.from(selectedProjects), stage);
+    batchProjectsMutation.mutate({ operation: 'UPDATE_STAGE', projectIds: Array.from(selectedProjects), payload: { stage } });
     clearSelection();
   };
 
   const handleBulkAssign = (userId: string, role: 'designer' | 'dev' | 'qa') => {
-    bulkAssignUser(Array.from(selectedProjects), userId, role);
+    batchProjectsMutation.mutate({ operation: 'ASSIGN_USER', projectIds: Array.from(selectedProjects), payload: { userId, role } });
     clearSelection();
   };
 
   const handleBulkArchive = () => {
-    bulkArchiveProjects(Array.from(selectedProjects));
+    batchProjectsMutation.mutate({ operation: 'ARCHIVE', projectIds: Array.from(selectedProjects), payload: {} });
     clearSelection();
   };
 
   const handleBulkDelete = () => {
-    bulkDeleteProjects(Array.from(selectedProjects));
+    batchProjectsMutation.mutate({ operation: 'DELETE', projectIds: Array.from(selectedProjects), payload: {} });
     clearSelection();
   };
 
-  const activeStages = Object.values(ProjectStage).filter(s => s !== ProjectStage.COMPLETED);
+  const activeStages = ORDERED_STAGES;
+  const BOARD_SCALE_WARN = 200;
 
   return (
     <div className="flex flex-col h-full min-h-screen">
+      {/* Scale Warning — shown when board has >200 active projects */}
+      {totalActive > BOARD_SCALE_WARN && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-700 px-8 py-2 flex items-center gap-2 text-amber-700 dark:text-amber-400 text-xs font-semibold">
+          <AlertIcon size={14} />
+          Large dataset detected ({totalActive}+ active projects). For best performance, use the{' '}
+          <a href="/ndpma/projects" className="underline hover:text-amber-900 dark:hover:text-amber-200 transition-colors">
+            filtered Projects view
+          </a>.
+        </div>
+      )}
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 px-8 py-6 shadow-sm">
+
         <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-[24px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">
@@ -480,11 +502,13 @@ const RoleSpecificDashboard = () => {
         <div className="mt-6">
           {viewMode === 'board' ? (
             <div className="flex gap-6 overflow-x-auto pb-6 scroll-smooth custom-scrollbar">
-              {activeStages.map(stage => (
+              {columns.map(({ stage, column }) => (
                 <KanbanColumn
                   key={stage}
-                  stage={stage}
-                  projects={filteredProjects.filter(p => p.stage === stage)}
+                  stage={stage as unknown as ProjectStage}
+                  projects={column.items}
+                  total={column.total}
+                  hasMore={column.hasMore}
                   onProjectClick={(p) => setSelectedProjectId(p.id)}
                   onAddProject={() => onAddProject()}
                 />
@@ -492,7 +516,7 @@ const RoleSpecificDashboard = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-              {filteredProjects.filter(p => p.stage !== ProjectStage.COMPLETED).map(project => (
+              {allProjects.map(project => (
                 <ProjectCard key={project.id} project={project} onClick={() => setSelectedProjectId(project.id)} />
               ))}
             </div>
@@ -515,63 +539,23 @@ const RoleSpecificDashboard = () => {
         />
       )}
 
-      {/* Pagination Toolbar */}
-      <div className="sticky bottom-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 p-4 shadow-lg z-20">
+      {/* Kanban Status Bar */}
+      <div className="sticky bottom-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-8 py-3 shadow-lg z-20">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <span className="text-sm text-slate-500 dark:text-slate-400 font-medium">
-            Showing page <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.total === 0 ? 0 : paginationMeta.page}</span> of <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.totalPages}</span>
-            <span className="mx-2">•</span>
-            Total <span className="font-bold text-slate-900 dark:text-slate-100">{paginationMeta.total}</span> projects
+            <span className="font-bold text-slate-900 dark:text-slate-100">{totalActive}</span> active projects across{' '}
+            <span className="font-bold text-slate-900 dark:text-slate-100">{columns.length}</span> stages
           </span>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page === 1}
-              onClick={() => setPage(Math.max(1, page - 1))}
-            >
-              Previous
-            </Button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, paginationMeta.totalPages) }, (_, i) => {
-                // Logic to show generic page window, simple for now: 1..5 or around current
-                // For sprint speed, just show generic range or simple dots if huge.
-                // Actually, let's keep it simple: Just Next/Prev is sufficient for "Visibility".
-                // Numbered pages nice to have but trickier logic.
-                // Let's just do numbers if totalPages < 10, else simple.
-
-                let pNum = i + 1;
-                if (paginationMeta.totalPages > 5 && page > 3) {
-                  pNum = page - 2 + i;
-                }
-                if (pNum > paginationMeta.totalPages) return null;
-
-                return (
-                  <button
-                    key={pNum}
-                    onClick={() => setPage(pNum)}
-                    className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${page === pNum
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'
-                      }`}
-                  >
-                    {pNum}
-                  </button>
-                );
-              })}
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page >= paginationMeta.totalPages}
-              onClick={() => setPage(page + 1)}
-            >
-              Next
-            </Button>
-          </div>
+          {columns.some(c => c.column.hasMore) && (
+            <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+              Some columns show top 20 — use{' '}
+              <a href="/ndpma/projects" className="underline hover:text-amber-800 dark:hover:text-amber-200">Projects view</a>
+              {' '}to see all
+            </span>
+          )}
         </div>
       </div>
+
     </div>
   );
 };

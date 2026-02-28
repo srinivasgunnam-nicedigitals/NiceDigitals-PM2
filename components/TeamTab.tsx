@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { backendApi } from '../services/api';
 import { Project, UserRole, TeamLeadRole, ProjectTeamMember } from '../types';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
+import { useUsers } from '../hooks/useUsers';
 import { useModal } from '../hooks/useModal';
 import { UserPlus, Edit3, Trash2, Users } from 'lucide-react';
 
@@ -11,7 +12,8 @@ interface TeamTabProps {
 }
 
 export const TeamTab: React.FC<TeamTabProps> = ({ project }) => {
-    const { currentUser, users } = useApp();
+    const { currentUser } = useAuth();
+    const { users } = useUsers();
     const { showConfirm, showPrompt, showAlert } = useModal();
     const queryClient = useQueryClient();
     const [editingMember, setEditingMember] = useState<ProjectTeamMember | null>(null);

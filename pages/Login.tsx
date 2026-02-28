@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
 import { Lock, Mail, ArrowRight, ShieldCheck, Zap, Eye, EyeOff } from 'lucide-react';
 import { backendApi } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { ResetPasswordModal } from '../components/ResetPasswordModal';
 
 export const Login = () => {
-    const { setCurrentUser, setAuthenticating } = useApp();
+    const { setCurrentUser, setAuthenticating } = useAuth();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');

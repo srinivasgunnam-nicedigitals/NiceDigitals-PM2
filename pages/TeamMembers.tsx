@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
+import { useUsers, useAddUser, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
+import { useProjectsQuery } from '../hooks/useProjectsQuery';
 import { UserRole, User, ProjectStage } from '../types';
 import { Plus, Mail, Shield, Trash2, X, Lock, User as UserIcon, AlertCircle, Edit2, Search, Filter, ChevronDown } from 'lucide-react';
 
@@ -24,7 +26,7 @@ const RoleBadge = ({ role }: { role: UserRole | string }) => {
 
 // Modals
 const AddUserModal = ({ onClose }: { onClose: () => void }) => {
-  const { addUser } = useApp();
+  const addUserMutation = useAddUser();
   const [formData, setFormData] = useState({
     name: '',
     username: '',
@@ -35,7 +37,7 @@ const AddUserModal = ({ onClose }: { onClose: () => void }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    addUser({
+    addUserMutation.mutate({
       ...formData,
       avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=random`
     } as any);
@@ -256,7 +258,11 @@ const EditUserModal = ({ user, onClose, onSave }: { user: User; onClose: () => v
 };
 
 const TeamMembers = () => {
-  const { users, projects, deleteUser, updateUser, currentUser } = useApp();
+  const { currentUser } = useAuth();
+  const { users } = useUsers();
+  const { projects } = useProjectsQuery(1, 500);
+  const updateUserMutation = useUpdateUser();
+  const deleteUserMutation = useDeleteUser();
   const [showAdd, setShowAdd] = useState(false);
   const [userToEdit, setUserToEdit] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
@@ -288,13 +294,13 @@ const TeamMembers = () => {
 
   const confirmDelete = () => {
     if (userToDelete) {
-      deleteUser(userToDelete);
+      deleteUserMutation.mutate(userToDelete);
       setUserToDelete(null);
     }
   };
 
   const handleSaveEdit = (userId: string, updates: Partial<User>) => {
-    updateUser(userId, updates);
+    updateUserMutation.mutate({ userId, updates });
   };
 
   const filteredUsers = useMemo(() => {

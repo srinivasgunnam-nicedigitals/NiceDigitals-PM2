@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { useApp } from '../store';
+import { useDevRankings } from '../hooks/useDashboard';
 import { useTheme } from '../ThemeContext';
 import {
   BarChart,
@@ -24,8 +24,7 @@ const NaBadge = () => (
 );
 
 const Leaderboard = () => {
-  const { getDevRankings } = useApp();
-  const rankings = getDevRankings();
+  const { data: rankings = [] } = useDevRankings();
 
   // Only devs with actual project data appear in charts — prevents false 100% bars
   const activeRankings = rankings.filter(r => r.hasData);

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, User, Bell, Shield, Moon, Sun, LogOut, Check, Upload, Key, Eye, EyeOff, Camera, Trash2 } from 'lucide-react';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
 import { backendApi } from '../services/api';
 import { useTheme } from '../ThemeContext';
 import { ImageCropModal } from './ImageCropModal';
@@ -13,7 +13,7 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
-    const { currentUser, setCurrentUser, logout } = useApp();
+    const { currentUser, setCurrentUser, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'security' | 'general'>('profile');
 

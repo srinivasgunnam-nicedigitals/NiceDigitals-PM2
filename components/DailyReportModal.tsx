@@ -1,6 +1,7 @@
 
 import React, { useEffect } from 'react';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
+import { useProjectsQuery } from '../hooks/useProjectsQuery';
 import { Project, UserRole, ProjectStage } from '../types';
 import { STAGE_CONFIG } from '../constants';
 import { X, Bell, Calendar, Clock, AlertCircle, ExternalLink } from 'lucide-react';
@@ -12,7 +13,8 @@ interface DailyReportModalProps {
 }
 
 export const DailyReportModal: React.FC<DailyReportModalProps> = ({ onClose }) => {
-  const { projects, currentUser } = useApp();
+  const { currentUser } = useAuth();
+  const { projects } = useProjectsQuery(1, 100); // Load all for briefing summary
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

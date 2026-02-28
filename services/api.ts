@@ -80,6 +80,11 @@ export const backendApi = {
         return response.data;
     },
 
+    // Silent session revalidation — called on mount by AuthContext
+    getMe: async (): Promise<User> => {
+        const response = await api.get<{ user: User }>('auth/me');
+        return response.data.user;
+    },
     requestPasswordReset: async (email: string) => {
         const response = await api.post<{ message: string, token?: string }>('auth/request-reset', { email });
         return response.data;
@@ -138,6 +143,11 @@ export const backendApi = {
     getClientNames: async (): Promise<string[]> => {
         const response = await api.get<string[]>('projects/client-names');
         return response.data;
+    },
+
+    getKanban: async (limitPerStage = 20) => {
+        const response = await api.get(`projects/kanban?limitPerStage=${limitPerStage}`);
+        return response.data; // KanbanBoard shape: { UPCOMING: { items, total, hasMore }, ... }
     },
 
     getProject: async (id: string) => {

@@ -1,4 +1,5 @@
 // Server Entry Point
+import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -11,6 +12,8 @@ import userRoutes from './routes/users.routes';
 import scoreRoutes from './routes/scores.routes';
 import bootstrapRoutes from './routes/bootstrap.routes';
 import { prisma } from './config/db';
+import { Server as SocketIOServer } from 'socket.io';
+import { registerRealtime } from './realtime/realtime';
 
 dotenv.config();
 
@@ -69,6 +72,7 @@ const allowedOrigins = [
 if (process.env.NODE_ENV !== 'production') {
     allowedOrigins.push('http://localhost:3000');
     allowedOrigins.push('http://localhost:5173');
+    allowedOrigins.push('http://localhost:5174'); // Vite fallback port when 5173 is occupied
 }
 
 import cookieParser from 'cookie-parser';
@@ -193,8 +197,26 @@ const startServer = async () => {
         logger.warn('SMTP service unavailable. Emails will not be sent, but server will start.');
     }
 
-    app.listen(PORT as number, '0.0.0.0', () => {
-        logger.info({ port: PORT }, 'Server started successfully on network IP 0.0.0.0');
+    // Wrap Express app in a raw HTTP server — required for Socket.io
+    const httpServer = createServer(app);
+
+    // Mount Socket.io on the same HTTP server.
+    // CORS origins match the Express CORS config above.
+    const io = new SocketIOServer(httpServer, {
+        cors: {
+            origin: allowedOrigins.filter(Boolean) as string[],
+            credentials: true,
+            methods: ['GET', 'POST'],
+        },
+        // Use only WebSocket transport once connected (no polling fallback in prod)
+        transports: ['websocket', 'polling'],
+    });
+
+    // Register authenticated handshake + tenant room binding
+    registerRealtime(io);
+
+    httpServer.listen(PORT as number, '0.0.0.0', () => {
+        logger.info({ port: PORT }, 'Server + WebSocket started on 0.0.0.0');
     });
 };
 

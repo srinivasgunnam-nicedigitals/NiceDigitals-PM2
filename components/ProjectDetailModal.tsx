@@ -4,9 +4,12 @@ import { createPortal } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { backendApi } from '../services/api';
 import DOMPurify from 'dompurify';
-
 import { Project, ProjectStage, UserRole, Comment } from '../types';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
+import { useUsers } from '../hooks/useUsers';
+import { useUpdateProject, useDeleteProject, useAdvanceStage } from '../hooks/useProjectMutations';
+import { useRecordQAFeedback } from '../hooks/useProjectQA';
+import { useAddComment, useDeleteComment } from '../hooks/useProjectComments';
 import { useModal } from '../hooks/useModal';
 import { STAGE_CONFIG } from '../constants';
 import {
@@ -32,10 +35,11 @@ const sanitizeScopeHtml = (html: string | undefined | null): string => {
 };
 
 const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClose: () => void }) => {
-  const { addComment, users, currentUser } = useApp();
+  const { currentUser } = useAuth();
+  const { users } = useUsers();
+  const addCommentMutation = useAddComment();
+  const deleteCommentMutation = useDeleteComment();
   const [commentText, setCommentText] = useState('');
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const queryClient = useQueryClient();
 
   const { data: commentsResponse, isLoading } = useQuery({
     queryKey: ['project-comments', project.id],
@@ -46,21 +50,12 @@ const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClos
   const handlePost = (e: React.FormEvent) => {
     e.preventDefault();
     if (!commentText.trim()) return;
-    addComment(project.id, commentText);
+    addCommentMutation.mutate({ projectId: project.id, text: commentText });
     setCommentText('');
   };
 
-  const handleDelete = async (commentId: string) => {
-    if (deletingId) return; // prevent double-click
-    setDeletingId(commentId);
-    try {
-      await backendApi.deleteComment(project.id, commentId);
-      await queryClient.invalidateQueries({ queryKey: ['project-comments', project.id] });
-    } catch (err: any) {
-      // Silently ignore — backend already rejects non-owners with 403
-    } finally {
-      setDeletingId(null);
-    }
+  const handleDelete = (commentId: string) => {
+    deleteCommentMutation.mutate({ projectId: project.id, commentId });
   };
 
   return (
@@ -93,7 +88,7 @@ const ProjectCommentsSidebar = ({ project, onClose }: { project: Project; onClos
                     {isMe && (
                       <button
                         onClick={() => handleDelete(comment.id)}
-                        disabled={deletingId === comment.id}
+                        disabled={deleteCommentMutation.isPending}
                         className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-300 hover:text-red-500 dark:hover:text-red-400 rounded disabled:opacity-30"
                         title="Delete message"
                       >
@@ -152,7 +147,13 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
   });
   const history = historyResponse?.data || [];
 
-  const { updateProject, advanceStage, recordQAFeedback, deleteProject, currentUser, users, archiveProject } = useApp();
+  const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
+  const { users } = useUsers();
+  const updateProjectMutation = useUpdateProject();
+  const deleteProjectMutation = useDeleteProject();
+  const advanceStageMutation = useAdvanceStage();
+  const qaFeedbackMutation = useRecordQAFeedback();
   const { showConfirm, showPrompt } = useModal();
   const [activeTab, setActiveTab] = useState<'checklist' | 'details' | 'history' | 'team'>('checklist');
   const [editScope, setEditScope] = useState(sanitizeScopeHtml(project.scope));
@@ -309,7 +310,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
   const handleSaveScope = () => {
     setIsSaving(true);
-    updateProject(project.id, { scope: sanitizeScopeHtml(editScope), version: project.version });
+    updateProjectMutation.mutate({ id: project.id, updates: { scope: sanitizeScopeHtml(editScope), version: project.version } });
     setTimeout(() => { setIsSaving(false); }, 1000);
   };
 
@@ -319,7 +320,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     if (role === UserRole.DESIGNER) update.assignedDesignerId = userId;
     if (role === UserRole.DEV_MANAGER) update.assignedDevManagerId = userId;
     if (role === UserRole.QA_ENGINEER) update.assignedQAId = userId;
-    updateProject(project.id, update);
+    updateProjectMutation.mutate({ id: project.id, updates: update });
   };
 
   const getChecklistForStage = () => {
@@ -341,7 +342,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     if (!canModifyChecklist) return;
     const { items, key } = getChecklistForStage();
     const newItems = items.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i);
-    updateProject(project.id, { [key]: newItems, version: project.version });
+    updateProjectMutation.mutate({ id: project.id, updates: { [key]: newItems, version: project.version } });
   };
 
   const handleAddTask = (e: React.FormEvent) => {
@@ -356,7 +357,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     };
 
     const newItems = [...items, newTask];
-    updateProject(project.id, { [key]: newItems, version: project.version });
+    updateProjectMutation.mutate({ id: project.id, updates: { [key]: newItems, version: project.version } });
     setNewTaskText('');
   };
 
@@ -367,7 +368,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
     const { items, key } = getChecklistForStage();
     const newItems = items.filter(i => i.id !== itemId);
-    updateProject(project.id, { [key]: newItems, version: project.version });
+    updateProjectMutation.mutate({ id: project.id, updates: { [key]: newItems, version: project.version } });
   };
 
   const handleDeleteAllTasks = async () => {
@@ -385,7 +386,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     });
 
     if (confirmed) {
-      updateProject(project.id, { [key]: [], version: project.version });
+      updateProjectMutation.mutate({ id: project.id, updates: { [key]: [], version: project.version } });
     }
   };
 
@@ -414,14 +415,12 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
       confirmText: 'Delete',
       cancelText: 'Cancel',
       validate: (value) => {
-        if (value !== 'DELETE') {
-          return 'You must type DELETE exactly to confirm';
-        }
+        if (value !== 'DELETE') return 'You must type DELETE exactly to confirm';
         return true;
       }
     });
-    if (confirmation) {
-      await deleteProject(project.id, confirmation);
+    if (confirmation === 'DELETE') {
+      await deleteProjectMutation.mutateAsync(project.id);
       onClose();
     }
   };
@@ -660,7 +659,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                           variant: 'error'
                         });
                         if (confirmed) {
-                          recordQAFeedback(project.id, false, currentUser!.id);
+                          qaFeedbackMutation.mutate({ id: project.id, passed: false, version: project.version });
                         }
                       }}
                       className="w-full py-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 font-bold text-[13px] rounded-xl border-2 border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all flex items-center justify-center gap-2"
@@ -704,7 +703,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
                       {project.assignedDesignerId && project.assignedDevManagerId && project.assignedQAId ? (
                         <button
-                          onClick={() => advanceStage(project.id, ProjectStage.DESIGN, currentUser!.id)}
+                       onClick={() => advanceStageMutation.mutate({ id: project.id, nextStage: ProjectStage.DESIGN, version: project.version })}
                           className="w-full py-4 bg-indigo-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
                         >
                           Start Project <ChevronRight size={18} />
@@ -729,7 +728,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                               variant: 'error'
                             });
                             if (confirmed) {
-                              recordQAFeedback(project.id, false, currentUser!.id);
+                              qaFeedbackMutation.mutate({ id: project.id, passed: false, version: project.version });
                             }
                           }}
                           className="flex-1 py-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-bold text-[14px] rounded-xl shadow-sm hover:bg-red-200 dark:hover:bg-red-900/50 transition-all flex items-center justify-center gap-3"
@@ -737,7 +736,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                           <AlertTriangle size={18} /> Reject & Return to Dev
                         </button>
                         <button
-                          onClick={() => recordQAFeedback(project.id, true, currentUser!.id)}
+                          onClick={() => qaFeedbackMutation.mutate({ id: project.id, passed: true, version: project.version })}
                           className="flex-1 py-4 bg-emerald-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-emerald-700 transition-all flex items-center justify-center gap-3"
                         >
                           QA Pass & Advance <ChevronRight size={18} />
@@ -745,7 +744,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                       </div>
                     ) : (nextStage ? (
                       <button
-                        onClick={() => advanceStage(project.id, nextStage, currentUser!.id)}
+                        onClick={() => advanceStageMutation.mutate({ id: project.id, nextStage: nextStage, version: project.version })}
                         className="w-full py-4 bg-indigo-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
                       >
                         Move to {STAGE_CONFIG[nextStage].label} <ChevronRight size={18} />

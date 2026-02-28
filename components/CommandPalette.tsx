@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useApp } from '../store';
+import { useProjectsQuery } from '../hooks/useProjectsQuery';
+import { useUsers } from '../hooks/useUsers';
 import { Project, ProjectStage } from '../types';
 import {
     Search,
@@ -42,7 +43,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     onOpenProject,
     onNewProject
 }) => {
-    const { projects, users } = useApp();
+    const { projects } = useProjectsQuery(1, 100); // Load all for search palette
+    const { users } = useUsers();
     const { theme, toggleTheme } = useTheme();
     const [query, setQuery] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(0);

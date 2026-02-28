@@ -2,12 +2,16 @@ import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { AppRoutes } from './Routes';
 import { ThemeProvider } from './ThemeContext';
-import { AppProvider, useApp } from './store';
 import { ModalProvider } from './hooks/useModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Layout } from './components/Layout';
-import RoleSpecificDashboard from './pages/Dashboard';
-import { Login } from './pages/Login';
+import { AuthProvider } from './contexts/AuthContext';
+
+// Provider Hierarchy (outermost = rendered first):
+// QueryClientProvider (index.tsx)
+//   └─ AuthProvider       (identity + silent revalidation)
+//       └─ ThemeProvider  (UI preference)
+//           └─ ModalProvider (imperative overlay)
+//               └─ App
 
 const AppContent = () => {
   return (
@@ -20,13 +24,13 @@ const AppContent = () => {
 const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <ThemeProvider>
-        <ModalProvider>
-          <AppProvider>
+      <AuthProvider>
+        <ThemeProvider>
+          <ModalProvider>
             <AppContent />
-          </AppProvider>
-        </ModalProvider>
-      </ThemeProvider>
+          </ModalProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 };

@@ -1,12 +1,12 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
 import { Layout as MainLayout } from './Layout';
 
 export const ProtectedLayout = () => {
-    const { currentUser, isLoading } = useApp();
+    const { currentUser, isRevalidating } = useAuth();
 
-    if (isLoading) {
+    if (isRevalidating) {
         return (
             <div className="h-screen w-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
                 <div className="flex flex-col items-center gap-4">

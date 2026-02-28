@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../ThemeContext';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { UserRole } from '../types';
@@ -65,7 +65,7 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, isActive, onClic
 );
 
 export const Layout: React.FC = () => {
-  const { currentUser, setCurrentUser, users, logout } = useApp();
+  const { currentUser, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   // const [currentView, setCurrentView] = useState<'dashboard' | 'overview' | 'team' | 'leaderboard' | 'completed' | 'activity'>('dashboard');
   const navigate = useNavigate();

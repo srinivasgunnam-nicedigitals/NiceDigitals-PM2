@@ -21,13 +21,8 @@ import { logAudit } from '../utils/audit';
 import { AppError } from '../utils/AppError';
 import { isBefore, startOfDay } from 'date-fns';
 
-const sanitizeScopeHtml = (html: string) => {
-    return html
-        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-        .replace(/\son\w+\s*=\s*(['"]).*?\1/gi, '')
-        .replace(/\son\w+\s*=\s*[^\s>]+/gi, '')
-        .replace(/javascript:/gi, '');
-};
+import { sanitizeHtml } from '../utils/sanitize';
+import { realtimeService } from '../realtime/RealtimeService';
 
 export const getProjectStats = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -61,6 +56,23 @@ export const getProjectStats = async (req: Request, res: Response, next: NextFun
     }
 };
 
+export const getKanban = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const tenantId = req.user?.tenantId;
+        if (!tenantId) {
+            throw AppError.unauthorized('Unauthorized: No tenant', 'NO_TENANT');
+        }
+        const limitPerStage = Math.min(
+            parseInt(req.query.limitPerStage as string) || 20,
+            50 // Hard ceiling per column
+        );
+        const board = await projectsService.getKanbanView(tenantId, limitPerStage);
+        res.json(board);
+    } catch (error) {
+        next(error);
+    }
+};
+
 export const getProjects = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.user?.tenantId;
@@ -69,7 +81,10 @@ export const getProjects = async (req: Request, res: Response, next: NextFunctio
         }
 
         const page = parseInt(req.query.page as string) || 1;
-        const MAX_LIMIT = 100;
+        // 500 is the practical upper bound for the Kanban board view.
+        // The paginated Projects Overview always passes an explicit limit (default 50),
+        // so raising this ceiling does not affect normal list queries.
+        const MAX_LIMIT = 500;
         const limit = Math.min(parseInt(req.query.limit as string) || 50, MAX_LIMIT);
         const skip = (page - 1) * limit;
 
@@ -234,7 +249,7 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
         }
 
         const p = createProjectSchema.parse(req.body);
-        const sanitizedScope = sanitizeScopeHtml(p.scope ?? "");
+        const sanitizedScope = sanitizeHtml(p.scope ?? "");
 
         // CROSS-TENANT VALIDATION (CRITICAL FIXED)
         const assignmentsToCheck = [p.assignedDesignerId, p.assignedDevManagerId, p.assignedQAId].filter(id => id);
@@ -336,6 +351,9 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
         };
 
         res.json(safeProject);
+
+        // Emit AFTER response — new project changes list count, stats, and board
+        realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats']);
     } catch (error) {
         next(error);
     }
@@ -387,7 +405,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
             const sanitizedUpdates = {
                 ...allowedUpdates,
                 ...(allowedUpdates.scope !== undefined
-                    ? { scope: sanitizeScopeHtml(allowedUpdates.scope) }
+                    ? { scope: sanitizeHtml(allowedUpdates.scope) }
                     : {})
             };
 
@@ -524,6 +542,9 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                 return up;
             });
 
+            // Emit AFTER transaction — admin update changes project state on the board
+            realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats']);
+
             return res.json(sanitizeProject(updatedProject, tenantId));
         }
 
@@ -642,7 +663,10 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
             return up;
         });
 
-        return res.json(sanitizeProject(updatedProject, tenantId));
+        res.json(sanitizeProject(updatedProject, tenantId));
+
+        // Emit AFTER response — member update (checklists etc.) may affect board state
+        realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats']);
 
     } catch (error) {
         next(error);
@@ -704,6 +728,9 @@ export const deleteProject = async (req: Request, res: Response, next: NextFunct
         });
 
         res.json({ success: true });
+
+        // Emit AFTER response — project removed from list, stats, and board
+        realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats']);
     } catch (error: any) {
         if (error.message === 'Project not found') {
             throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');

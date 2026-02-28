@@ -1,7 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useApp } from '../store';
+import { useCreateProject } from '../hooks/useProjectMutations';
+import { useClientNames } from '../hooks/useProjectsQuery';
+import { useUsers } from '../hooks/useUsers';
 import { Priority, UserRole } from '../types';
 import { X, Calendar, Target, Flag, User, Paintbrush, Code } from 'lucide-react';
 
@@ -10,7 +12,9 @@ interface AddProjectModalProps {
 }
 
 export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => {
-  const { addProject, clients, users } = useApp();
+  const createProjectMutation = useCreateProject();
+  const { data: clients = [] } = useClientNames();
+  const { users } = useUsers();
   const [formData, setFormData] = useState({
     name: '',
     clientName: '',
@@ -31,14 +35,12 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
     e.preventDefault();
     if (!isFormValid) return;
 
-    addProject({
+    createProjectMutation.mutate({
       ...formData,
-      // Sanitize optional assignments: convert empty strings to null/undefined
-      // The backend expects optional nullable UUIDs
       assignedDesignerId: formData.assignedDesignerId || null,
       assignedDevManagerId: formData.assignedDevManagerId || null
     });
-    onClose(); // Ensure modal closes
+    onClose();
   };
 
   useEffect(() => {

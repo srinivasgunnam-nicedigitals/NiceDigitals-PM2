@@ -1,6 +1,10 @@
 
 import React, { useState, useMemo } from 'react';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
+import { useProjectsQuery } from '../hooks/useProjectsQuery';
+import { useUsers } from '../hooks/useUsers';
+import { useUpdateProject } from '../hooks/useProjectMutations';
+import { useQueryClient } from '@tanstack/react-query';
 import { Project, ProjectStage, UserRole } from '../types';
 import { format, parseISO } from 'date-fns';
 import { Search, Archive, ArrowRight, User as UserIcon, Calendar, CheckCircle, MoreVertical, RotateCcw } from 'lucide-react';
@@ -10,7 +14,11 @@ import { Input, Badge, Button } from '../components/ui';
 import { useModal } from '../hooks/useModal';
 
 const CompletedProjects = () => {
-  const { projects, users, currentUser, unarchiveProject } = useApp();
+  const { currentUser } = useAuth();
+  const { projects } = useProjectsQuery(1, 500);
+  const { users } = useUsers();
+  const updateProjectMutation = useUpdateProject();
+  const queryClient = useQueryClient();
   const { showConfirm } = useModal();
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
@@ -115,7 +123,23 @@ const CompletedProjects = () => {
                                   cancelText: 'Cancel'
                                 });
                                 if (confirmed) {
-                                  unarchiveProject(project.id);
+                                  // Restore to ADMIN_REVIEW and clear completedAt
+                                  const project_current = queryClient.getQueryData<Project>(['project', project.id]);
+                                  const version = project_current?.version ?? project.version;
+                                  updateProjectMutation.mutate({
+                                    id: project.id,
+                                    updates: {
+                                      stage: ProjectStage.ADMIN_REVIEW,
+                                      completedAt: null as any,
+                                      version,
+                                      newHistoryItem: {
+                                        stage: ProjectStage.ADMIN_REVIEW,
+                                        timestamp: new Date().toISOString(),
+                                        userId: currentUser?.id,
+                                        action: 'Project Restored from Archive'
+                                      }
+                                    }
+                                  });
                                 }
                               }}
                               className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-all"

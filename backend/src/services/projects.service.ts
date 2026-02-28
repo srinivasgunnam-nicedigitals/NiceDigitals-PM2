@@ -2,6 +2,7 @@ import { prisma } from '../config/db';
 import { differenceInDays, parseISO } from 'date-fns';
 import { AppError } from '../utils/AppError';
 import { logAudit } from '../utils/audit';
+import { realtimeService } from '../realtime/RealtimeService';
 
 // Scoring rules - moved from frontend constants
 const SCORING_RULES = {
@@ -205,6 +206,9 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
         return updatedProject;
     });
 
+    // Rankings change when projects complete (scoring), notifications on advance, board moves stages
+    realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats', 'rankings', 'notifications']);
+
     return result;
 }
 
@@ -327,6 +331,9 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
             return updatedProject;
         });
 
+        // QA pass: stage advance — board card moves, scores change, notifications fire
+        realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats', 'rankings', 'notifications']);
+
         return result;
     } else {
         // QA Failed - return to DEVELOPMENT
@@ -409,6 +416,77 @@ export async function recordQAFeedback(params: QAFeedbackParams) {
             return updatedProject;
         });
 
+        // QA fail: card returns to DEVELOPMENT stage — board must refresh
+        realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats', 'rankings', 'notifications']);
+
         return result;
     }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Kanban View Service
+// Returns projects grouped by stage, each stage independently
+// capped at limitPerStage. This is the ONLY correct data contract
+// for the Kanban board — never share it with the table/list view.
+// ─────────────────────────────────────────────────────────────
+
+export type KanbanStage = 'UPCOMING' | 'DESIGN' | 'DEVELOPMENT' | 'QA' | 'ADMIN_REVIEW' | 'SENT_TO_CLIENT';
+
+export interface KanbanColumn {
+    items: any[];        // Full project shape (same select as getProjects)
+    total: number;       // Total count in this stage (for column header)
+    hasMore: boolean;    // True when total > limitPerStage
+}
+
+export type KanbanBoard = Record<KanbanStage, KanbanColumn>;
+
+const KANBAN_STAGES: KanbanStage[] = [
+    'UPCOMING', 'DESIGN', 'DEVELOPMENT', 'QA', 'ADMIN_REVIEW', 'SENT_TO_CLIENT'
+];
+
+const KANBAN_SELECT = {
+    id: true,
+    name: true,
+    clientName: true,
+    priority: true,
+    stage: true,
+    overallDeadline: true,
+    isDelayed: true,
+    createdAt: true,
+    tenantId: true,
+    version: true,
+    assignedDesignerId: true,
+    assignedDevManagerId: true,
+    assignedQAId: true,
+    scope: true,
+    designChecklist: true,
+    devChecklist: true,
+    qaChecklist: true,
+    finalChecklist: true,
+    assignedDesigner: { select: { id: true, name: true, avatar: true } },
+    assignedDevManager: { select: { id: true, name: true, avatar: true } },
+    assignedQA: { select: { id: true, name: true, avatar: true } },
+} as const;
+
+export async function getKanbanView(tenantId: string, limitPerStage = 20): Promise<KanbanBoard> {
+    // Query every active stage in parallel — one round-trip per stage
+    const results = await Promise.all(
+        KANBAN_STAGES.map(async (stage) => {
+            const [items, total] = await Promise.all([
+                prisma.project.findMany({
+                    where: { tenantId, stage: stage as any },
+                    select: KANBAN_SELECT,
+                    orderBy: { overallDeadline: 'asc' },
+                    take: limitPerStage,
+                }),
+                prisma.project.count({ where: { tenantId, stage: stage as any } }),
+            ]);
+            return { stage, items, total, hasMore: total > limitPerStage };
+        })
+    );
+
+    return results.reduce((board, { stage, items, total, hasMore }) => {
+        board[stage] = { items, total, hasMore };
+        return board;
+    }, {} as KanbanBoard);
 }

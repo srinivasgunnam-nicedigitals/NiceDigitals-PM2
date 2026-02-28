@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useApp } from '../store';
+import { useAuth } from '../contexts/AuthContext';
+import { useUsers } from '../hooks/useUsers';
 import { backendApi } from '../services/api';
 import { EmptyState } from '../components/EmptyState';
 import { Activity as ActivityIcon, Clock, MessageSquare, CheckCircle, UserPlus, Loader2 } from 'lucide-react';
@@ -39,7 +40,8 @@ const getActivityIcon = (action: string) => {
 };
 
 const Activity = () => {
-    const { users, currentUser } = useApp();
+    const { currentUser } = useAuth();
+    const { users } = useUsers();
 
     const { data: activities = [], isLoading } = useQuery({
         queryKey: ['activity-feed'],
