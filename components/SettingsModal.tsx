@@ -4,6 +4,7 @@ import { X, User, Bell, Shield, Moon, Sun, LogOut, Check, Upload, Key, Eye, EyeO
 import { useAuth } from '../contexts/AuthContext';
 import { backendApi } from '../services/api';
 import { useTheme } from '../ThemeContext';
+import { ChecklistTemplatesSettings } from './ChecklistTemplatesSettings';
 import { ImageCropModal } from './ImageCropModal';
 import { validateImageFile, imageToBase64 } from '../utils/imageUtils';
 import { Button } from './ui';
@@ -15,7 +16,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     const { currentUser, setCurrentUser, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
-    const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'security' | 'general'>('profile');
+    const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'security' | 'general' | 'templates'>('profile');
 
     // Local state for changes
     const [formData, setFormData] = useState({
@@ -168,6 +169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                             { id: 'notifications', label: 'Notifications', icon: Bell },
                             { id: 'security', label: 'Security', icon: Key },
                             { id: 'general', label: 'General', icon: Shield },
+                            ...(currentUser?.role === 'ADMIN' ? [{ id: 'templates', label: 'Workflow Templates', icon: Check }] as const : []),
                         ].map(item => (
                             <button
                                 key={item.id}
@@ -264,6 +266,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
                                     </div>
                                 </div>
                             </div>
+                        )}
+
+                        {activeTab === 'templates' && (
+                            <ChecklistTemplatesSettings />
                         )}
 
                         {activeTab === 'notifications' && (

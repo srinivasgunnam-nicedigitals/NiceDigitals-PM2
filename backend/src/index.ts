@@ -175,6 +175,12 @@ app.get('/', (req, res) => {
 import rankingRoutes from './routes/ranking.routes';
 import notificationRoutes from './routes/notifications.routes';
 import activityRoutes from './routes/activity.routes';
+import templateRoutes from './routes/checklist-templates.routes';
+import disciplineRoutes from './routes/discipline.routes';
+import executionHealthRoutes from './routes/execution-health.routes';
+import calibrationRoutes from './routes/calibration.routes';
+import { startDisciplineCron } from './services/discipline-cron.service';
+import { startHealthCron } from './services/health-cron.service';
 import { emailService } from './services/email.service';
 import './workers/audit.worker';
 
@@ -187,6 +193,10 @@ app.use('/api/scores', apiLimiter, scoreRoutes);
 app.use('/api/rankings', apiLimiter, rankingRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
 app.use('/api/activity', apiLimiter, activityRoutes);
+app.use('/api/checklist-templates', apiLimiter, templateRoutes);
+app.use('/api/discipline', apiLimiter, disciplineRoutes);
+app.use('/api/projects', apiLimiter, executionHealthRoutes);
+app.use('/api/calibration', apiLimiter, calibrationRoutes);
 
 // Global error handler
 app.use(errorHandler);
@@ -217,8 +227,11 @@ const startServer = async () => {
 
     httpServer.listen(PORT as number, '0.0.0.0', () => {
         logger.info({ port: PORT }, 'Server + WebSocket started on 0.0.0.0');
+        
+        // Start daily discipline computation cron
+        startDisciplineCron();
+        startHealthCron();
     });
 };
 
 startServer();
-

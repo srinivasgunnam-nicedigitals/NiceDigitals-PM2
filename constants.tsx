@@ -17,13 +17,14 @@ import {
 } from 'lucide-react';
 
 export const STAGE_CONFIG = {
-  [ProjectStage.UPCOMING]: { label: 'Upcoming', icon: <Clock className="w-5 h-5" />, color: 'bg-slate-100 text-slate-600' },
+  [ProjectStage.DISCOVERY]: { label: 'Discovery', icon: <Search className="w-5 h-5" />, color: 'bg-slate-100 text-slate-600' },
   [ProjectStage.DESIGN]: { label: 'Design Phase', icon: <Paintbrush className="w-5 h-5" />, color: 'bg-indigo-100 text-indigo-600' },
+  [ProjectStage.CLIENT_REVIEW]: { label: 'Client Review', icon: <ExternalLink className="w-5 h-5" />, color: 'bg-sky-100 text-sky-600' },
   [ProjectStage.DEVELOPMENT]: { label: 'Development', icon: <Code className="w-5 h-5" />, color: 'bg-blue-100 text-blue-600' },
-  [ProjectStage.QA]: { label: 'QA Testing', icon: <Search className="w-5 h-5" />, color: 'bg-amber-100 text-amber-600' },
-  [ProjectStage.ADMIN_REVIEW]: { label: 'Admin Review', icon: <ShieldCheck className="w-5 h-5" />, color: 'bg-purple-100 text-purple-600' },
-  [ProjectStage.SEND_TO_CLIENT]: { label: 'Send to Client', icon: <Send className="w-5 h-5" />, color: 'bg-sky-100 text-sky-600' },
-  [ProjectStage.SENT_TO_CLIENT]: { label: 'Sent to Client', icon: <ExternalLink className="w-5 h-5" />, color: 'bg-cyan-100 text-cyan-600' },
+  [ProjectStage.INTERNAL_QA]: { label: 'Internal QA', icon: <ClipboardCheck className="w-5 h-5" />, color: 'bg-amber-100 text-amber-600' },
+  [ProjectStage.INTERNAL_APPROVAL]: { label: 'Internal Approval', icon: <ShieldCheck className="w-5 h-5" />, color: 'bg-purple-100 text-purple-600' },
+  [ProjectStage.CLIENT_UAT]: { label: 'Client UAT', icon: <Send className="w-5 h-5" />, color: 'bg-cyan-100 text-cyan-600' },
+  [ProjectStage.DEPLOYMENT]: { label: 'Deployment', icon: <Clock className="w-5 h-5" />, color: 'bg-teal-100 text-teal-600' },
   [ProjectStage.COMPLETED]: { label: 'Completed', icon: <CheckCircle2 className="w-5 h-5" />, color: 'bg-emerald-100 text-emerald-600' },
 };
 

@@ -16,9 +16,11 @@ model Tenant {
   history       HistoryItem[]
   notifications Notification[]
   projects      Project[]
-  teamMembers   ProjectTeamMember[]
-  scores        ScoreEntry[]
-  users         User[]
+  teamMembers        ProjectTeamMember[]
+  scores             ScoreEntry[]
+  users              User[]
+  checklistTemplates ChecklistTemplate[]
+  disciplineSnapshots DisciplineSnapshot[]
 }
 
 model AuditLog {
@@ -65,6 +67,7 @@ model User {
   projectsManaged  Project[]            @relation("AssignedDevManager")
   projectsQA       Project[]            @relation("AssignedQA")
   scores           ScoreEntry[]
+  disciplineSnapshots DisciplineSnapshot[]
   tenant           Tenant               @relation(fields: [tenantId], references: [id])
 }
 
@@ -97,15 +100,22 @@ model Project {
   designChecklist      Json[]
   devChecklist         Json[]
   qaChecklist          Json[]
-  finalChecklist       Json[]
-  isDelayed            Boolean             @default(false)
+  finalChecklist        Json[]
+  clientReviewChecklist Json[]
+  clientUatChecklist    Json[]
+  deploymentChecklist   Json[]
+  isDelayed             Boolean             @default(false)
   qaFailCount          Int                 @default(0)
   createdAt            DateTime            @default(now())
   completedAt          DateTime?
+  enteredStageAt       DateTime?
   updatedAt            DateTime            @updatedAt
   version              Int                 @default(1)
+  healthAtCompletion   Float?
+  actualOutcome        String?             // ON_TIME | DELAYED | ESCALATED
   comments             Comment[]
   history              HistoryItem[]
+  healthSnapshots      ProjectHealthSnapshot[]
   assignedDesigner     User?               @relation("AssignedDesigner", fields: [assignedDesignerId], references: [id])
   assignedDevManager   User?               @relation("AssignedDevManager", fields: [assignedDevManagerId], references: [id])
   assignedQA           User?               @relation("AssignedQA", fields: [assignedQAId], references: [id])
@@ -116,6 +126,29 @@ model Project {
   @@index([tenantId])
   @@index([assignedDevManagerId])
   @@index([tenantId, createdAt])
+  @@index([tenantId, stage])
+  @@index([tenantId, completedAt])
+}
+
+model ChecklistTemplate {
+  id           String        @id @default(uuid())
+  tenantId     String
+  stage        ProjectStage
+  name         String
+  description  String?
+  isDefault    Boolean       @default(false)
+
+  version      Int           @default(1)
+  isArchived   Boolean       @default(false)
+
+  items        Json          
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, stage])
 }
 
 model Comment {
@@ -132,15 +165,56 @@ model Comment {
 
 model HistoryItem {
   id                String       @id @default(uuid())
-  stage             ProjectStage
-  action            String
-  timestamp         DateTime     @default(now())
-  userId            String
-  rejectionSnapshot Json?
+  stage                ProjectStage
+  toStage              ProjectStage?
+  action               String
+  timestamp            DateTime     @default(now())
+  userId               String
+  performedByUserId    String?
+  performedByRole      UserRole?
+  revertReasonCategory RevertReasonCategory?
+  revertReasonNote     String?
+  rejectionSnapshot    Json?
+  checklistCompletionRate Float?
   projectId         String
   tenantId          String
   project           Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tenant            Tenant       @relation(fields: [tenantId], references: [id])
+
+  @@index([projectId, timestamp])
+  @@index([tenantId, stage])
+}
+
+model DisciplineSnapshot {
+  id              String   @id @default(uuid())
+  tenantId        String
+  userId          String
+  snapshotDate    DateTime @db.Date
+  disciplineIndex Float
+
+  qaDomainScore        Float
+  reworkDomainScore     Float
+  checklistDomainScore  Float
+  deadlineDomainScore   Float
+  velocityDomainScore   Float
+
+  qaFirstPassCount      Int     @default(0)
+  qaRejectCount         Int     @default(0)
+  revertCount           Int     @default(0)
+  highSevRevertCount    Int     @default(0)
+  checklistAvgRate      Float   @default(0)
+  onTimeRate            Float   @default(0)
+  avgDelayDays          Float   @default(0)
+  avgStageDays          Float   @default(0)
+  tenantAvgStageDays    Float   @default(0)
+  tenantAvgReverts      Float   @default(0)
+
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, userId, snapshotDate])
+  @@index([tenantId, userId])
 }
 
 model ScoreEntry {
@@ -202,14 +276,26 @@ enum UserRole {
 }
 
 enum ProjectStage {
-  UPCOMING
+  DISCOVERY
   DESIGN
+  CLIENT_REVIEW
   DEVELOPMENT
-  QA
-  SEND_TO_CLIENT
-  SENT_TO_CLIENT
+  INTERNAL_QA
+  INTERNAL_APPROVAL
+  CLIENT_UAT
+  DEPLOYMENT
   COMPLETED
-  ADMIN_REVIEW
+}
+
+enum RevertReasonCategory {
+  DESIGN_CLARIFICATION
+  DEV_IMPLEMENTATION_BUG
+  QA_MISS
+  CLIENT_CHANGE_REQUEST
+  SCOPE_EXPANSION
+  PERFORMANCE_ISSUE
+  CONTENT_MISSING
+  OTHER
 }
 
 enum Priority {
@@ -223,4 +309,18 @@ enum TeamLeadRole {
   DESIGN
   DEV
   QA
+}
+
+model ProjectHealthSnapshot {
+  id              String   @id @default(uuid())
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId       String
+  tenantId        String
+  health          Float
+  volatilityDelta Float?
+  breakdown       Json     // Store the domain values AND primaryDriver
+  snapshotDate    DateTime @default(now())
+  
+  @@index([projectId])
+  @@index([tenantId, snapshotDate])
 }

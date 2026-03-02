@@ -16,7 +16,7 @@ import { backendApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { Project } from '../types';
 
-export type KanbanStage = 'UPCOMING' | 'DESIGN' | 'DEVELOPMENT' | 'QA' | 'ADMIN_REVIEW' | 'SENT_TO_CLIENT';
+export type KanbanStage = 'DISCOVERY' | 'DESIGN' | 'CLIENT_REVIEW' | 'DEVELOPMENT' | 'INTERNAL_QA' | 'INTERNAL_APPROVAL' | 'CLIENT_UAT' | 'DEPLOYMENT';
 
 export interface KanbanColumn {
     items: Project[];
@@ -27,7 +27,7 @@ export interface KanbanColumn {
 export type KanbanBoard = Partial<Record<KanbanStage, KanbanColumn>>;
 
 const ORDERED_STAGES: KanbanStage[] = [
-    'UPCOMING', 'DESIGN', 'DEVELOPMENT', 'QA', 'ADMIN_REVIEW', 'SENT_TO_CLIENT'
+    'DISCOVERY', 'DESIGN', 'CLIENT_REVIEW', 'DEVELOPMENT', 'INTERNAL_QA', 'INTERNAL_APPROVAL', 'CLIENT_UAT', 'DEPLOYMENT'
 ];
 
 const EMPTY_BOARD: KanbanBoard = ORDERED_STAGES.reduce((acc, stage) => {

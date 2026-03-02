@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { backendApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -9,22 +9,9 @@ import { useAuth } from '../contexts/AuthContext';
 // from the main project hooks.
 // ============================================================
 
-export function useRecordQAFeedback() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, passed, version }: { id: string; passed: boolean; version: number }) =>
-      backendApi.recordQAFeedback(id, passed, version),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] === 'projects',
-      });
-      queryClient.invalidateQueries({ queryKey: ['project', variables.id] });
-      queryClient.invalidateQueries({ queryKey: ['project-history', variables.id] });
-      queryClient.invalidateQueries({ queryKey: ['scores'] });
-    },
-  });
-}
+// useRecordQAFeedback — REMOVED
+// QA rejections now use the unified advanceStage pipeline
+// with structured revertReasonCategory + revertReasonNote.
 
 export function useProjectHistory(projectId: string | null, page = 1, limit = 50) {
   const { currentUser } = useAuth();

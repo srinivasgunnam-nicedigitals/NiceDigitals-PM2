@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { getAvatarUrl } from '../utils/avatar';
 import { useTheme } from '../ThemeContext';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { UserRole } from '../types';
@@ -52,15 +53,15 @@ const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, isActive, onClic
     onClick={onClick}
     title={isCollapsed ? label : undefined}
     className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 rounded-lg transition-all duration-200 group ${isActive
-      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-[0_1px_3px_rgba(0,0,0,0.1)] dark:shadow-none ring-1 ring-slate-200 dark:ring-slate-600'
-      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700'
+      ? 'bg-slate-800 text-slate-100 shadow-sm ring-1 ring-slate-700'
+      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50'
       }`}
   >
-    <div className={`${isActive ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'} transition-colors shrink-0`}>
+    <div className={`${isActive ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300'} transition-colors shrink-0`}>
       {React.cloneElement(icon as any, { size: 18, strokeWidth: isActive ? 2.5 : 2 })}
     </div>
-    {!isCollapsed && <span className={`text-[13px] font-semibold tracking-tight whitespace-nowrap`}>{label}</span>}
-    {isActive && !isCollapsed && <div className="ml-auto w-1 h-1 bg-indigo-600 rounded-full shrink-0" />}
+    {!isCollapsed && <span className={`text-[13px] font-semibold tracking-wide whitespace-nowrap`}>{label}</span>}
+    {isActive && !isCollapsed && <div className="ml-auto w-1 h-1 bg-indigo-500 rounded-full shrink-0 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />}
   </button>
 );
 
@@ -159,20 +160,20 @@ export const Layout: React.FC = () => {
       )}
 
       {/* Sidebar - Pro Workspace Minimalist */}
-      <aside className={`bg-[#F9FAFB] dark:bg-slate-800 border-r border-slate-200/60 dark:border-slate-700 flex flex-col fixed lg:relative h-full z-50 transition-all duration-300 ${desktopSidebarCollapsed ? 'w-20' : 'w-64'} ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      <aside className={`bg-slate-900 border-r border-slate-800 shadow-[inset_-1px_0_10px_rgba(0,0,0,0.2)] flex flex-col fixed lg:relative h-full z-50 transition-all duration-300 ${desktopSidebarCollapsed ? 'w-20' : 'w-64'} ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="p-5">
           <div className={`flex items-center gap-2.5 px-2 py-1.5 mb-8 ${desktopSidebarCollapsed ? 'justify-center relative' : ''}`}>
-            <div className="w-8 h-8 shrink-0 bg-slate-900 dark:bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm ring-1 ring-white/20">N</div>
+            <div className="w-8 h-8 shrink-0 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm ring-1 ring-white/20">N</div>
             {!desktopSidebarCollapsed && (
               <div className="flex flex-col flex-1 overflow-hidden">
-                <h1 className="font-bold text-[14px] leading-none text-slate-900 dark:text-slate-100 truncate">Nice Digitals</h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 truncate">PM Tool</p>
+                <h1 className="font-bold text-[14px] leading-none text-slate-100 truncate">Nice Digitals</h1>
+                <p className="text-xs text-slate-400 font-medium mt-0.5 truncate">PM Tool</p>
               </div>
             )}
             {/* Desktop Collapse Toggle */}
             <button
               onClick={() => setDesktopSidebarCollapsed(!desktopSidebarCollapsed)}
-              className={`hidden lg:flex p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all ${desktopSidebarCollapsed ? 'absolute -right-3 top-6 translate-x-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm z-50 rounded-full' : 'ml-auto'}`}
+              className={`hidden lg:flex p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-all ${desktopSidebarCollapsed ? 'absolute -right-3 top-6 translate-x-full bg-slate-900 border border-slate-700 shadow-sm z-50 rounded-full' : 'ml-auto'}`}
               title={desktopSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {desktopSidebarCollapsed ? <ChevronRight size={14} /> : <div className="rotate-180"><ChevronRight size={14} /></div>}
@@ -180,7 +181,7 @@ export const Layout: React.FC = () => {
             {/* Mobile Close Button */}
             <button
               onClick={() => setMobileSidebarOpen(false)}
-              className="lg:hidden p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+              className="lg:hidden p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors"
             >
               <CloseIcon size={20} />
             </button>
@@ -188,9 +189,9 @@ export const Layout: React.FC = () => {
 
           <div className="space-y-1">
             {!desktopSidebarCollapsed ? (
-              <p className="text-[11px] font-bold text-slate-400 px-3 py-2 uppercase tracking-wider">Main</p>
+              <p className="text-[11px] font-bold text-slate-500 px-3 py-2 uppercase tracking-wider">Main</p>
             ) : (
-              <div className="h-px w-6 bg-slate-200 dark:bg-slate-700 mx-auto mb-4 mt-2" />
+              <div className="h-px w-6 bg-slate-800 mx-auto mb-4 mt-2" />
             )}
             <SidebarItem
               icon={<LayoutDashboard />}
@@ -217,9 +218,9 @@ export const Layout: React.FC = () => {
 
           <div className="mt-8 space-y-1">
             {!desktopSidebarCollapsed ? (
-              <p className="text-[11px] font-bold text-slate-400 px-3 py-2 uppercase tracking-wider">Management</p>
+              <p className="text-[11px] font-bold text-slate-500 px-3 py-2 uppercase tracking-wider">Management</p>
             ) : (
-              <div className="h-px w-6 bg-slate-200 dark:bg-slate-700 mx-auto mb-4 mt-2" />
+              <div className="h-px w-6 bg-slate-800 mx-auto mb-4 mt-2" />
             )}
             {currentUser?.role === UserRole.ADMIN && (
               <SidebarItem
@@ -247,49 +248,41 @@ export const Layout: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-auto p-4 border-t border-slate-200/60 dark:border-slate-700">
+        <div className="mt-auto p-4 border-t border-slate-800">
           <div
             onClick={() => setShowSettings(true)}
-            className={`flex items-center gap-3 ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer group`}
+            className={`flex items-center gap-3 ${desktopSidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-3 rounded-xl hover:bg-slate-800/50 transition-colors cursor-pointer group`}
             title={desktopSidebarCollapsed ? "Settings" : undefined}
           >
-            <img src={currentUser?.avatar} className="w-8 h-8 rounded-lg ring-1 ring-slate-200 dark:ring-slate-700 shrink-0" alt="User" />
+            <img src={getAvatarUrl(currentUser?.name || 'User', currentUser?.avatar)} className="w-8 h-8 rounded-lg ring-1 ring-slate-700 shrink-0" alt="User" />
             {!desktopSidebarCollapsed && (
               <>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate leading-none">{currentUser?.name}</p>
-                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1 truncate">{(currentUser?.role || '').replace('_', ' ')}</p>
+                  <p className="text-[13px] font-bold text-slate-100 truncate leading-none">{currentUser?.name}</p>
+                  <p className="text-xs font-medium text-slate-400 mt-1 truncate">{(currentUser?.role || '').replace('_', ' ')}</p>
                 </div>
-                <Settings size={14} className="text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors shrink-0" />
+                <Settings size={14} className="text-slate-500 group-hover:text-slate-300 transition-colors shrink-0" />
               </>
             )}
           </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
             onClick={toggleTheme}
-            fullWidth
-            className={`mt-3 ${desktopSidebarCollapsed ? 'px-0 justify-center' : ''}`}
+            className={`w-full flex items-center ${desktopSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 mt-2 rounded-lg transition-all duration-200 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50`}
             title={desktopSidebarCollapsed ? (theme === 'light' ? 'Dark Mode' : 'Light Mode') : undefined}
           >
-            {theme === 'light' ? <Moon size={14} className="shrink-0" /> : <Sun size={14} className="shrink-0" />}
-            {!desktopSidebarCollapsed && (theme === 'light' ? 'Dark Mode' : 'Light Mode')}
-          </Button>
+            {theme === 'light' ? <Moon size={16} className="shrink-0" /> : <Sun size={16} className="shrink-0" />}
+            {!desktopSidebarCollapsed && <span className="text-[13px] font-semibold tracking-wide">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>}
+          </button>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              logout();
-            }}
-            fullWidth
-            className={`mt-2 text-slate-500 hover:text-red-600 hover:bg-red-50/50 dark:hover:bg-red-900/20 ${desktopSidebarCollapsed ? 'px-0 justify-center' : ''}`}
+          <button
+            onClick={() => logout()}
+            className={`w-full flex items-center ${desktopSidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2 mt-1 rounded-lg transition-all duration-200 text-slate-400 hover:text-red-400 hover:bg-red-900/40`}
             title={desktopSidebarCollapsed ? "Sign Out" : undefined}
           >
-            <LogOut size={14} className="shrink-0" />
-            {!desktopSidebarCollapsed && "Sign Out"}
-          </Button>
+            <LogOut size={16} className="shrink-0" />
+            {!desktopSidebarCollapsed && <span className="text-[13px] font-semibold tracking-wide">Sign Out</span>}
+          </button>
         </div>
       </aside>
 

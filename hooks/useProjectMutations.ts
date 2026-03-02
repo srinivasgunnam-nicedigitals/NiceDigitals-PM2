@@ -60,28 +60,19 @@ export function useAdvanceStage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ id, nextStage, version }: { id: string; nextStage: ProjectStage; version: number }) =>
-      backendApi.advanceProjectStage(id, nextStage, version),
+    mutationFn: ({ id, nextStage, version, revertReasonCategory, revertReasonNote }: {
+      id: string;
+      nextStage: ProjectStage;
+      version: number;
+      revertReasonCategory?: string;
+      revertReasonNote?: string;
+    }) =>
+      backendApi.advanceProjectStage(id, nextStage, version, revertReasonCategory, revertReasonNote),
     onSuccess: (_, variables) => {
       invalidateProjects(queryClient);
       queryClient.invalidateQueries({ queryKey: ['project', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['project-history', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['scores'] });
-    },
-  });
-}
-
-export function useBatchProjects() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (request: {
-      operation: 'UPDATE_STAGE' | 'ASSIGN_USER' | 'ARCHIVE' | 'DELETE';
-      projectIds: string[];
-      payload: Record<string, any>;
-    }) => backendApi.batchUpdateProjects(request),
-    onSuccess: () => {
-      invalidateProjects(queryClient);
     },
   });
 }

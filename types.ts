@@ -7,14 +7,26 @@ export enum UserRole {
 }
 
 export enum ProjectStage {
-  UPCOMING = 'UPCOMING',
+  DISCOVERY = 'DISCOVERY',
   DESIGN = 'DESIGN',
+  CLIENT_REVIEW = 'CLIENT_REVIEW',
   DEVELOPMENT = 'DEVELOPMENT',
-  QA = 'QA',
-  ADMIN_REVIEW = 'ADMIN_REVIEW',
-  SEND_TO_CLIENT = 'SEND_TO_CLIENT',
-  SENT_TO_CLIENT = 'SENT_TO_CLIENT',
+  INTERNAL_QA = 'INTERNAL_QA',
+  INTERNAL_APPROVAL = 'INTERNAL_APPROVAL',
+  CLIENT_UAT = 'CLIENT_UAT',
+  DEPLOYMENT = 'DEPLOYMENT',
   COMPLETED = 'COMPLETED'
+}
+
+export enum RevertReasonCategory {
+  DESIGN_CLARIFICATION = 'DESIGN_CLARIFICATION',
+  DEV_IMPLEMENTATION_BUG = 'DEV_IMPLEMENTATION_BUG',
+  QA_MISS = 'QA_MISS',
+  CLIENT_CHANGE_REQUEST = 'CLIENT_CHANGE_REQUEST',
+  SCOPE_EXPANSION = 'SCOPE_EXPANSION',
+  PERFORMANCE_ISSUE = 'PERFORMANCE_ISSUE',
+  CONTENT_MISSING = 'CONTENT_MISSING',
+  OTHER = 'OTHER'
 }
 
 export enum Priority {
@@ -40,6 +52,26 @@ export interface ChecklistItem {
   completed: boolean;
 }
 
+export interface ChecklistTemplateItem {
+  id?: string;
+  label: string;
+  required?: boolean;
+}
+
+export interface ChecklistTemplate {
+  id: string;
+  tenantId: string;
+  stage: ProjectStage;
+  name: string;
+  description?: string;
+  isDefault: boolean;
+  version: number;
+  isArchived: boolean;
+  items: ChecklistTemplateItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Comment {
   id: string;
   userId: string;
@@ -56,9 +88,13 @@ export interface ScoreEntry {
 
 export interface HistoryItem {
   stage: ProjectStage;
+  toStage?: ProjectStage;
   timestamp: string;
   userId: string;
+  performedByRole?: UserRole;
   action: string;
+  revertReasonCategory?: RevertReasonCategory;
+  revertReasonNote?: string;
   rejectionSnapshot?: ChecklistItem[];
 }
 
@@ -81,6 +117,10 @@ export interface Project {
   qaChecklist: ChecklistItem[];
   finalChecklist: ChecklistItem[];
 
+  clientReviewChecklist: ChecklistItem[];
+  clientUatChecklist: ChecklistItem[];
+  deploymentChecklist: ChecklistItem[];
+
   comments?: Comment[];
 
   isDelayed: boolean;
@@ -89,6 +129,7 @@ export interface Project {
   history?: HistoryItem[];
 
   createdAt: string;
+  enteredStageAt?: string;
   completedAt?: string;
 
   // Version control for optimistic locking
@@ -124,4 +165,66 @@ export interface ProjectTeamMember {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DisciplineSnapshot {
+  id: string;
+  tenantId: string;
+  userId: string;
+  snapshotDate: string;
+  disciplineIndex: number;
+
+  qaDomainScore: number;
+  reworkDomainScore: number;
+  checklistDomainScore: number;
+  deadlineDomainScore: number;
+  velocityDomainScore: number;
+
+  qaFirstPassCount: number;
+  qaRejectCount: number;
+  revertCount: number;
+  highSevRevertCount: number;
+  checklistAvgRate: number;
+  onTimeRate: number;
+  avgDelayDays: number;
+  avgStageDays: number;
+  tenantAvgStageDays: number;
+  tenantAvgReverts: number;
+
+  createdAt: string;
+}
+
+export interface ExecutionHealth {
+  executionHealth: number;
+  deliveryConfidence: number;
+  atRisk: boolean;
+  breakdown: {
+    deadlinePressure: number;
+    reworkInstability: number;
+    checklistPenalty: number;
+    stageDeviation: number;
+    disciplineModifier: number;
+  };
+}
+
+export interface CalibrationProject {
+  id: string;
+  name: string;
+  clientName: string;
+  completedAt: string;
+  overallDeadline: string;
+  healthAtCompletion: number | null;
+  actualOutcome: 'ON_TIME' | 'DELAYED' | 'ESCALATED' | null;
+  assignedDevManager: { id: string; name: string } | null;
+}
+
+export interface CalibrationReport {
+  projects: CalibrationProject[];
+  stats: {
+    totalCompleted: number;
+    withHealthData: number;
+    withOutcome: number;
+    calibrated: number;
+    accuracy: number | null;
+  };
 }

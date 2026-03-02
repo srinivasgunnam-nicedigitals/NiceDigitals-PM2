@@ -8,10 +8,12 @@ import { Project, ProjectStage, UserRole, Comment } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useUsers } from '../hooks/useUsers';
 import { useUpdateProject, useDeleteProject, useAdvanceStage } from '../hooks/useProjectMutations';
-import { useRecordQAFeedback } from '../hooks/useProjectQA';
+import { RevertReasonModal } from './RevertReasonModal';
 import { useAddComment, useDeleteComment } from '../hooks/useProjectComments';
 import { useModal } from '../hooks/useModal';
 import { STAGE_CONFIG } from '../constants';
+import { getAvatarUrl } from '../utils/avatar';
+import { ExecutionHealthBreakdown } from './ExecutionHealth';
 import {
   X, CheckCircle, Send, AlertTriangle, ChevronRight,
   MessageSquare, History, Clock, User as UserIcon, Shield,
@@ -153,8 +155,8 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
   const updateProjectMutation = useUpdateProject();
   const deleteProjectMutation = useDeleteProject();
   const advanceStageMutation = useAdvanceStage();
-  const qaFeedbackMutation = useRecordQAFeedback();
   const { showConfirm, showPrompt } = useModal();
+  const [revertModal, setRevertModal] = useState<{ from: string; to: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'checklist' | 'details' | 'history' | 'team'>('checklist');
   const [editScope, setEditScope] = useState(sanitizeScopeHtml(project.scope));
   const [isSaving, setIsSaving] = useState(false);
@@ -327,15 +329,19 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
     switch (project.stage) {
       case ProjectStage.DESIGN: return { items: Array.isArray(project.designChecklist) ? project.designChecklist : [], key: 'designChecklist' };
       case ProjectStage.DEVELOPMENT: return { items: Array.isArray(project.devChecklist) ? project.devChecklist : [], key: 'devChecklist' };
-      case ProjectStage.QA: return { items: Array.isArray(project.qaChecklist) ? project.qaChecklist : [], key: 'qaChecklist' };
-      default: return { items: Array.isArray(project.finalChecklist) ? project.finalChecklist : [], key: 'finalChecklist' };
+      case ProjectStage.INTERNAL_QA: return { items: Array.isArray(project.qaChecklist) ? project.qaChecklist : [], key: 'qaChecklist' };
+      case ProjectStage.INTERNAL_APPROVAL: return { items: Array.isArray(project.finalChecklist) ? project.finalChecklist : [], key: 'finalChecklist' };
+      case ProjectStage.CLIENT_REVIEW: return { items: Array.isArray(project.clientReviewChecklist) ? project.clientReviewChecklist : [], key: 'clientReviewChecklist' };
+      case ProjectStage.CLIENT_UAT: return { items: Array.isArray(project.clientUatChecklist) ? project.clientUatChecklist : [], key: 'clientUatChecklist' };
+      case ProjectStage.DEPLOYMENT: return { items: Array.isArray(project.deploymentChecklist) ? project.deploymentChecklist : [], key: 'deploymentChecklist' };
+      default: return { items: [], key: '' }; // No checklist for DISCOVERY or COMPLETED
     }
   };
 
   const canModifyChecklist = currentUser?.role === UserRole.ADMIN || (
     (project.stage === ProjectStage.DESIGN && currentUser?.id === project.assignedDesignerId) ||
     (project.stage === ProjectStage.DEVELOPMENT && currentUser?.id === project.assignedDevManagerId) ||
-    (project.stage === ProjectStage.QA && currentUser?.id === project.assignedQAId)
+    (project.stage === ProjectStage.INTERNAL_QA && currentUser?.id === project.assignedQAId)
   );
 
   const toggleChecklistItem = (itemId: string) => {
@@ -396,11 +402,14 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
   const getNextStage = () => {
     switch (project.stage) {
-      case ProjectStage.UPCOMING: return ProjectStage.DESIGN;
-      case ProjectStage.DESIGN: return ProjectStage.DEVELOPMENT;
-      case ProjectStage.DEVELOPMENT: return ProjectStage.QA;
-      case ProjectStage.QA: return ProjectStage.ADMIN_REVIEW;
-      case ProjectStage.ADMIN_REVIEW: return ProjectStage.COMPLETED;
+      case ProjectStage.DISCOVERY: return ProjectStage.DESIGN;
+      case ProjectStage.DESIGN: return ProjectStage.CLIENT_REVIEW;
+      case ProjectStage.CLIENT_REVIEW: return ProjectStage.DEVELOPMENT;
+      case ProjectStage.DEVELOPMENT: return ProjectStage.INTERNAL_QA;
+      case ProjectStage.INTERNAL_QA: return ProjectStage.INTERNAL_APPROVAL;
+      case ProjectStage.INTERNAL_APPROVAL: return ProjectStage.CLIENT_UAT;
+      case ProjectStage.CLIENT_UAT: return ProjectStage.DEPLOYMENT;
+      case ProjectStage.DEPLOYMENT: return ProjectStage.COMPLETED;
       default: return null;
     }
   };
@@ -573,13 +582,19 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
             {activeTab === 'checklist' && (
               <div className="max-w-3xl mx-auto space-y-8 pb-12">
+                {/* Execution Health Breakdown — above checklists for context */}
+                {project.stage !== 'COMPLETED' && (
+                  <div className="mb-6">
+                    <ExecutionHealthBreakdown projectId={project.id} />
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-6 group/header">
                   <h3 className="text-[14px] font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-3">
                     <span className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400"><CheckCircle size={16} /></span>
                     {STAGE_CONFIG[project.stage]?.label ? `${STAGE_CONFIG[project.stage].label} CHECKLIST`.toUpperCase() : 'PHASE COMPLETION CHECKLIST'}
                   </h3>
                   <div className="flex items-center gap-4">
-                    {currentUser?.role === UserRole.ADMIN && items.length > 0 && project.stage !== ProjectStage.UPCOMING && (
+                    {currentUser?.role === UserRole.ADMIN && items.length > 0 && project.stage !== ProjectStage.DISCOVERY && (
                       <button
                         onClick={handleDeleteAllTasks}
                         className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all rounded-lg"
@@ -588,7 +603,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                         <Trash2 size={16} />
                       </button>
                     )}
-                    {project.stage !== ProjectStage.UPCOMING && (
+                    {project.stage !== ProjectStage.DISCOVERY && (
                       <div className="flex flex-col items-end">
                         <span className="text-[14px] font-bold text-slate-900 dark:text-white leading-none">{items.filter(i => i.completed).length} / {items.length}</span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-1">Verified Actions</span>
@@ -597,7 +612,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                   </div>
                 </div>
 
-                {project.stage !== ProjectStage.UPCOMING && (
+                {project.stage !== ProjectStage.DISCOVERY && (
                   <>
                     <div className="space-y-2">
                       {items.map((item, idx) => (
@@ -647,30 +662,10 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                 )}
 
                 <div className="pt-8 space-y-4">
-                  {/* QA Rejection Button - Always available during QA stage */}
-                  {project.stage === ProjectStage.QA && !isChecklistComplete && (
-                    <button
-                      onClick={async () => {
-                        const confirmed = await showConfirm({
-                          title: 'Reject Project',
-                          message: 'Are you sure you want to reject this project and return it to Development? This will reset the QA checklist.',
-                          confirmText: 'Reject & Return',
-                          cancelText: 'Cancel',
-                          variant: 'error'
-                        });
-                        if (confirmed) {
-                          qaFeedbackMutation.mutate({ id: project.id, passed: false, version: project.version });
-                        }
-                      }}
-                      className="w-full py-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 font-bold text-[13px] rounded-xl border-2 border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/40 transition-all flex items-center justify-center gap-2"
-                    >
-                      <AlertTriangle size={16} /> Reject & Return to Development
-                    </button>
-                  )}
-
-                  {/* Advancement Buttons */}
-                  {project.stage === ProjectStage.UPCOMING ? (
-                    // Start Project Gate
+                  {project.stage === ProjectStage.DISCOVERY ? (
+                    // ----------------------------------------------------------------
+                    // START PROJECT GATE (DISCOVERY)
+                    // ----------------------------------------------------------------
                     <div className="space-y-6">
                       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-6 rounded-xl shadow-sm">
                         <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-4">Operations Lead</h4>
@@ -685,7 +680,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                               <div key={assign.role} className="flex flex-col gap-2">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{assign.label}</span>
                                 <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                                  <img src={user?.avatar || `https://picsum.photos/seed/${assign.role}/32/32`} className={`w-6 h-6 rounded-md ${!user && 'opacity-20'}`} alt="" />
+                                  <img src={getAvatarUrl(user?.name || assign.label, user?.avatar)} className={`w-6 h-6 rounded-md ${!user && 'opacity-20'}`} alt="" />
                                   <div className="flex-1">
                                     {currentUser?.role === UserRole.ADMIN ? (
                                       <select value={assign.assignedId || ""} onChange={(e) => handleAssignment(assign.role, e.target.value)} className="w-full text-[12px] font-bold bg-transparent border-none p-0 focus:ring-0 cursor-pointer text-slate-900 dark:text-slate-100 dark:bg-slate-900">
@@ -703,7 +698,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
 
                       {project.assignedDesignerId && project.assignedDevManagerId && project.assignedQAId ? (
                         <button
-                       onClick={() => advanceStageMutation.mutate({ id: project.id, nextStage: ProjectStage.DESIGN, version: project.version })}
+                          onClick={() => advanceStageMutation.mutate({ id: project.id, nextStage: ProjectStage.DESIGN, version: project.version })}
                           className="w-full py-4 bg-indigo-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
                         >
                           Start Project <ChevronRight size={18} />
@@ -715,46 +710,96 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                         </div>
                       )}
                     </div>
-                  ) : isChecklistComplete ? (
-                    project.stage === ProjectStage.QA ? (
-                      <div className="flex gap-4">
-                        <button
-                          onClick={async () => {
-                            const confirmed = await showConfirm({
-                              title: 'Reject Project',
-                              message: 'Are you sure you want to reject this project and return it to Development?',
-                              confirmText: 'Reject & Return',
-                              cancelText: 'Cancel',
-                              variant: 'error'
-                            });
-                            if (confirmed) {
-                              qaFeedbackMutation.mutate({ id: project.id, passed: false, version: project.version });
-                            }
-                          }}
-                          className="flex-1 py-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-bold text-[14px] rounded-xl shadow-sm hover:bg-red-200 dark:hover:bg-red-900/50 transition-all flex items-center justify-center gap-3"
-                        >
-                          <AlertTriangle size={18} /> Reject & Return to Dev
-                        </button>
-                        <button
-                          onClick={() => qaFeedbackMutation.mutate({ id: project.id, passed: true, version: project.version })}
-                          className="flex-1 py-4 bg-emerald-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-emerald-700 transition-all flex items-center justify-center gap-3"
-                        >
-                          QA Pass & Advance <ChevronRight size={18} />
-                        </button>
-                      </div>
-                    ) : (nextStage ? (
-                      <button
-                        onClick={() => advanceStageMutation.mutate({ id: project.id, nextStage: nextStage, version: project.version })}
-                        className="w-full py-4 bg-indigo-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"
-                      >
-                        Move to {STAGE_CONFIG[nextStage].label} <ChevronRight size={18} />
-                      </button>
-                    ) : null)
                   ) : (
-                    <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center gap-3 text-slate-400 grayscale">
-                      <Clock size={16} />
-                      <span className="text-[12px] font-bold uppercase tracking-widest">Complete all tasks to escalate</span>
-                    </div>
+                    // ----------------------------------------------------------------
+                    // UNIFIED TRANSITION CONTROLS (ALL OTHER STAGES)
+                    // ----------------------------------------------------------------
+                    (() => {
+                      // Define backward transition configuration for the current stage
+                      let backwardConfig: { to: ProjectStage; label: string; icon: React.ReactNode; roles: UserRole[], variant: 'red' | 'amber' } | null = null;
+                      
+                      if (project.stage === ProjectStage.INTERNAL_QA) {
+                        backwardConfig = { to: ProjectStage.DEVELOPMENT, label: 'Reject & Return to Dev', icon: <AlertTriangle size={18} />, roles: [UserRole.QA_ENGINEER, UserRole.ADMIN], variant: 'red' };
+                      } else if (project.stage === ProjectStage.CLIENT_REVIEW) {
+                        backwardConfig = { to: ProjectStage.DESIGN, label: 'Return to Design', icon: <RotateCcw size={18} />, roles: [UserRole.ADMIN], variant: 'red' };
+                      } else if (project.stage === ProjectStage.DEVELOPMENT) {
+                        backwardConfig = { to: ProjectStage.DESIGN, label: 'Return to Design', icon: <RotateCcw size={18} />, roles: [UserRole.DEV_MANAGER, UserRole.ADMIN], variant: 'red' };
+                      } else if (project.stage === ProjectStage.CLIENT_UAT) {
+                        backwardConfig = { to: ProjectStage.INTERNAL_QA, label: 'Return to QA', icon: <RotateCcw size={18} />, roles: [UserRole.ADMIN], variant: 'red' };
+                      } else if (project.stage === ProjectStage.COMPLETED) {
+                        backwardConfig = { to: ProjectStage.INTERNAL_APPROVAL, label: 'Reopen for Internal Approval', icon: <RotateCcw size={18} />, roles: [UserRole.ADMIN], variant: 'amber' };
+                      }
+
+                      const canRevert = backwardConfig && currentUser && backwardConfig.roles.includes(currentUser.role as UserRole);
+
+                      // Helper function for the backward button UI
+                      const renderBackwardBtn = (isSideBySide: boolean) => {
+                        if (!canRevert || !backwardConfig) return null;
+                        const { to, label, icon, variant } = backwardConfig;
+                        
+                        const bgColors = variant === 'red' 
+                          ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-700 dark:text-red-400 border-2 border-red-200 dark:border-red-800'
+                          : 'bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-400 border-2 border-amber-200 dark:border-amber-800';
+                          
+                        const layoutClasses = isSideBySide
+                           ? `flex-1 py-4 font-bold text-[14px] rounded-xl shadow-sm transition-all flex items-center justify-center gap-3 ${variant === 'red' ? 'bg-red-100 dark:bg-red-900/30 border-0 hover:bg-red-200 dark:hover:bg-red-900/50' : bgColors}`
+                           : `w-full py-3 font-bold text-[13px] rounded-xl transition-all flex items-center justify-center gap-2 ${bgColors}`;
+
+                        return (
+                          <button
+                            key="backward-btn"
+                            onClick={() => setRevertModal({ from: project.stage, to })}
+                            className={layoutClasses}
+                          >
+                            {icon} {label}
+                          </button>
+                        );
+                      };
+
+                      if (isChecklistComplete) {
+                        // CHECKLIST COMPLETE: Show forward transition (and side-by-side backward if applicable)
+                        const forwardBtn = project.stage === ProjectStage.INTERNAL_QA ? (
+                          <button
+                            key="forward-btn"
+                            onClick={() => advanceStageMutation.mutate({ id: project.id, nextStage: ProjectStage.INTERNAL_APPROVAL, version: project.version })}
+                            className={canRevert ? "flex-1 py-4 bg-emerald-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-emerald-700 transition-all flex items-center justify-center gap-3" : "w-full py-4 bg-emerald-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-emerald-700 transition-all flex items-center justify-center gap-3"}
+                          >
+                            QA Pass & Advance <ChevronRight size={18} />
+                          </button>
+                        ) : nextStage ? (
+                          <button
+                            key="forward-btn"
+                            onClick={() => advanceStageMutation.mutate({ id: project.id, nextStage: nextStage, version: project.version })}
+                            className={canRevert ? "flex-1 py-4 bg-indigo-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-3" : "w-full py-4 bg-indigo-600 text-white font-bold text-[14px] rounded-xl shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-3"}
+                          >
+                            Move to {STAGE_CONFIG[nextStage].label} <ChevronRight size={18} />
+                          </button>
+                        ) : null;
+
+                        return canRevert && forwardBtn ? (
+                          <div className="flex gap-4">
+                            {renderBackwardBtn(true)}
+                            {forwardBtn}
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {renderBackwardBtn(false)}
+                            {forwardBtn}
+                          </div>
+                        );
+                      } else {
+                        // CHECKLIST INCOMPLETE: Show isolated backward button (if allowed) and incomplete message
+                        return (
+                          <div className="space-y-4">
+                            {renderBackwardBtn(false)}
+                            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center gap-3 text-slate-400 grayscale">
+                              <Clock size={16} />
+                              <span className="text-[12px] font-bold uppercase tracking-widest">Complete all tasks to escalate</span>
+                            </div>
+                          </div>
+                        );
+                      }
+                    })()
                   )}
                 </div>
               </div>
@@ -772,6 +817,12 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
                       <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1.5">{format(parseISO(h.timestamp), 'MMM d, HH:mm')}</p>
                       <p className="text-[14px] font-bold text-slate-900 dark:text-slate-100">{h.action}</p>
                       <p className="text-[12px] font-medium text-slate-500 mt-1">Initiated by {users.find(u => u.id === h.userId)?.name}</p>
+                      {h.revertReasonCategory && (
+                        <div className="mt-2 p-2.5 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg">
+                          <p className="text-[11px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider">{(h.revertReasonCategory as string).replace(/_/g, ' ')}</p>
+                          {h.revertReasonNote && <p className="text-[12px] text-slate-600 dark:text-slate-400 mt-1">{h.revertReasonNote as string}</p>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -795,6 +846,30 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ project:
   return (
     <>
       {createPortal(modalContent, document.body)}
+
+      {/* Revert Reason Modal — Governance Enforcement Surface */}
+      {revertModal && createPortal(
+        <RevertReasonModal
+          isOpen={true}
+          fromStage={revertModal.from}
+          toStage={revertModal.to}
+          isSubmitting={advanceStageMutation.isPending}
+          onClose={() => setRevertModal(null)}
+          onSubmit={(category, note) => {
+            advanceStageMutation.mutate(
+              {
+                id: project.id,
+                nextStage: revertModal.to as ProjectStage,
+                version: project.version,
+                revertReasonCategory: category,
+                revertReasonNote: note,
+              },
+              { onSuccess: () => setRevertModal(null) }
+            );
+          }}
+        />,
+        document.body
+      )}
 
       {showEditModal && <EditProjectModal project={project} onClose={() => setShowEditModal(false)} />}
 

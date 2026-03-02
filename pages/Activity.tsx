@@ -7,6 +7,7 @@ import { backendApi } from '../services/api';
 import { EmptyState } from '../components/EmptyState';
 import { Activity as ActivityIcon, Clock, MessageSquare, CheckCircle, UserPlus, Loader2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { getAvatarUrl } from '../utils/avatar';
 
 // Derive the correct icon from the action string (case-insensitive)
 const getActivityIcon = (action: string) => {
@@ -98,7 +99,7 @@ const Activity = () => {
                                             <div className="flex items-center gap-3 mt-3">
                                                 <div className="flex items-center gap-2">
                                                     <img
-                                                        src={`https://picsum.photos/seed/${activity.userId ?? 'system'}/24/24`}
+                                                        src={getAvatarUrl(userName, user?.avatar)}
                                                         className="w-5 h-5 rounded-full ring-2 ring-white dark:ring-slate-800"
                                                         alt=""
                                                     />

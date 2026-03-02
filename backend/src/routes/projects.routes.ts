@@ -1,16 +1,12 @@
 import { Router } from 'express';
 import { authenticateToken, requireAdmin } from '../middleware/auth.middleware';
 import * as projectsController from '../controllers/projects.controller';
-import * as batchController from '../controllers/batch.controller';
 import * as phase2aController from '../controllers/phase2a.controller';
 
 const router = Router();
 
 // All routes require authentication
 router.use(authenticateToken);
-
-// Batch operations (must be before /:id routes)
-router.post('/batch', batchController.batchUpdateProjects);
 
 // CRUD operations
 router.get('/stats', projectsController.getProjectStats);
@@ -36,7 +32,6 @@ router.delete('/:id/comments/:commentId', projectsController.deleteComment);
 
 // Secure stage advancement (server calculates scores)
 router.post('/:id/advance-stage', projectsController.advanceStage);
-router.post('/:id/qa-feedback', projectsController.recordQAFeedback);
 
 // Phase 2A: Admin deadline modification
 router.patch('/:id/change-deadline', phase2aController.changeDeadline);

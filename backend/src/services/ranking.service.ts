@@ -56,7 +56,7 @@ export class RankingService {
             const qaAttempted = devProjects.filter(p =>
                 p.stage !== 'DESIGN' &&
                 p.stage !== 'DEVELOPMENT' &&
-                p.stage !== 'UPCOMING'
+                p.stage !== 'DISCOVERY'
             );
             const qaFirstTimePassed = qaAttempted.filter(p => (p.qaFailCount || 0) === 0).length;
             const totalQA = qaAttempted.length;

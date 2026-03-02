@@ -91,8 +91,8 @@ const ProjectsOverview = () => {
       <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 px-8 py-6 shadow-sm">
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h2 className="text-[24px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">Projects Overview</h2>
-            <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium mt-2">Managing {meta.total} active production records</p>
+            <h2 className="text-[24px] font-semibold text-slate-900 dark:text-slate-100 tracking-tight leading-none">Projects Overview</h2>
+            <p className="text-[12px] text-slate-500 dark:text-slate-400 font-medium mt-2">Managing {visibleProjects.length} active project{visibleProjects.length !== 1 ? 's' : ''}</p>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
@@ -125,7 +125,7 @@ const ProjectsOverview = () => {
 
       {/* Table */}
       <div className="p-8 max-w-[1400px] mx-auto w-full flex-1">
-        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden shadow-sm">
+        <div className="bg-white dark:bg-slate-800 border border-transparent dark:border-slate-700/50 rounded-2xl overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.03)] dark:shadow-none">
           {isLoading ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">

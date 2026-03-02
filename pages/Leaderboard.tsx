@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { useDevRankings } from '../hooks/useDashboard';
+import { getAvatarUrl } from '../utils/avatar';
 import { useTheme } from '../ThemeContext';
 import {
   BarChart,
@@ -141,7 +142,7 @@ const Leaderboard = () => {
                           #{activeRank + 1}
                         </span>
                       )}
-                      <img src={`https://picsum.photos/seed/${rank.userId}/40/40`} className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-600" alt="" />
+                      <img src={getAvatarUrl(rank.userName)} className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-600" alt="" />
                       <div>
                         <p className="font-bold text-slate-900 dark:text-slate-100">{rank.userName}</p>
                         {isInactive && (

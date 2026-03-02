@@ -88,18 +88,6 @@ export const ChangeDeadlineModal: React.FC<ChangeDeadlineModalProps> = ({ projec
                     </button>
                 </div>
 
-                <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                    <div className="flex items-start gap-2">
-                        <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400 mt-0.5" />
-                        <div>
-                            <p className="text-[11px] font-bold text-amber-900 dark:text-amber-200 uppercase tracking-wider">Admin Only</p>
-                            <p className="text-[12px] text-amber-700 dark:text-amber-300 mt-1">
-                                Changing the deadline requires justification and confirmation.
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                         <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">

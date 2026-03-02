@@ -1,5 +1,6 @@
-
 import React, { useState, useMemo } from 'react';
+import { STAGE_CONFIG } from '../constants';
+import { getAvatarUrl } from '../utils/avatar';
 import { useAuth } from '../contexts/AuthContext';
 import { useProjectsQuery } from '../hooks/useProjectsQuery';
 import { useUsers } from '../hooks/useUsers';
@@ -89,7 +90,7 @@ const CompletedProjects = () => {
                         <div className="flex items-center gap-3">
                           <div className="flex -space-x-2">
                             {[designer, dev].filter(Boolean).map(lead => (
-                              <img key={lead?.id} src={lead?.avatar} className="w-7 h-7 rounded-full border-2 border-white shadow-sm" alt="" title={lead?.name} />
+                              <img key={lead?.id} src={getAvatarUrl(lead?.name || 'User', lead?.avatar)} className="w-7 h-7 rounded-full border-2 border-white dark:border-slate-800 shadow-sm" alt="" title={lead?.name} />
                             ))}
                           </div>
                           <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight">
@@ -101,7 +102,7 @@ const CompletedProjects = () => {
                         <div className="flex items-center gap-2">
                           <Calendar className="w-3.5 h-3.5 text-slate-300 dark:text-slate-500" />
                           <span className="text-sm font-black text-slate-700 dark:text-slate-300">
-                            {project.completedAt ? format(parseISO(project.completedAt), 'MMM d, yyyy') : 'N/A'}
+                            {format(parseISO(project.completedAt || project.overallDeadline), 'MMM d, yyyy')}
                           </span>
                         </div>
                       </td>
@@ -129,11 +130,11 @@ const CompletedProjects = () => {
                                   updateProjectMutation.mutate({
                                     id: project.id,
                                     updates: {
-                                      stage: ProjectStage.ADMIN_REVIEW,
+                                      stage: ProjectStage.INTERNAL_APPROVAL,
                                       completedAt: null as any,
                                       version,
                                       newHistoryItem: {
-                                        stage: ProjectStage.ADMIN_REVIEW,
+                                        stage: ProjectStage.INTERNAL_APPROVAL,
                                         timestamp: new Date().toISOString(),
                                         userId: currentUser?.id,
                                         action: 'Project Restored from Archive'

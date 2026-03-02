@@ -22,7 +22,8 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
     priority: Priority.MEDIUM,
     overallDeadline: '',
     assignedDesignerId: '',
-    assignedDevManagerId: ''
+    assignedDevManagerId: '',
+    useDefaultChecklists: true
   });
 
   const isFormValid = formData.name.trim() !== '' &&
@@ -37,6 +38,7 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
 
     createProjectMutation.mutate({
       ...formData,
+      overallDeadline: new Date(`${formData.overallDeadline}T23:59:59.999Z`).toISOString(),
       assignedDesignerId: formData.assignedDesignerId || null,
       assignedDevManagerId: formData.assignedDevManagerId || null
     });
@@ -191,6 +193,19 @@ export const AddProjectModal: React.FC<AddProjectModalProps> = ({ onClose }) => 
                 value={formData.scope}
                 onChange={e => setFormData({ ...formData, scope: e.target.value })}
               />
+            </div>
+
+            <div className="flex items-center gap-3 py-2">
+              <input
+                type="checkbox"
+                id="defaultChecklists"
+                checked={formData.useDefaultChecklists}
+                onChange={e => setFormData({ ...formData, useDefaultChecklists: e.target.checked })}
+                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <label htmlFor="defaultChecklists" className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                Auto-inject default Checklist Templates
+              </label>
             </div>
 
             <button

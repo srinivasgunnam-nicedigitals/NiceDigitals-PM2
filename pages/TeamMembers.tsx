@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useUsers, useAddUser, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
 import { useProjectsQuery } from '../hooks/useProjectsQuery';
 import { UserRole, User, ProjectStage } from '../types';
+import { getAvatarUrl } from '../utils/avatar';
 import { Plus, Mail, Shield, Trash2, X, Lock, User as UserIcon, AlertCircle, Edit2, Search, Filter, ChevronDown } from 'lucide-react';
 
 const RoleBadge = ({ role }: { role: UserRole | string }) => {
@@ -39,7 +40,7 @@ const AddUserModal = ({ onClose }: { onClose: () => void }) => {
     e.preventDefault();
     addUserMutation.mutate({
       ...formData,
-      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name)}&background=random`
+      avatar: getAvatarUrl(formData.name)
     } as any);
     onClose();
   };
@@ -405,7 +406,7 @@ const TeamMembers = () => {
                   <tr key={user.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
                     <td className="px-6 py-3">
                       <div className="flex items-center gap-3">
-                        <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`} 
+                        <img src={getAvatarUrl(user.name, user.avatar)} 
                              className="w-10 h-10 rounded-full ring-1 ring-slate-200 dark:ring-slate-700" alt="" />
                         <div>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-0">{user.name}</p>

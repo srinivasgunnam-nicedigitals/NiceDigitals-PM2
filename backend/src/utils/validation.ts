@@ -28,10 +28,14 @@ export const createProjectSchema = z.object({
     assignedQAId: z.string().uuid().nullable().optional(),
 
     // Checklists (Arrays of objects)
+    useDefaultChecklists: z.boolean().optional(),
     designChecklist: z.array(checklistItemSchema).max(50).optional(),
     devChecklist: z.array(checklistItemSchema).max(50).optional(),
     qaChecklist: z.array(checklistItemSchema).max(50).optional(),
     finalChecklist: z.array(checklistItemSchema).max(50).optional(),
+    clientReviewChecklist: z.array(checklistItemSchema).max(50).optional(),
+    clientUatChecklist: z.array(checklistItemSchema).max(50).optional(),
+    deploymentChecklist: z.array(checklistItemSchema).max(50).optional(),
 }).strict(); // Reject unknown fields
 
 // === ADMIN AUTHORITY SCHEMA ===
@@ -41,7 +45,7 @@ export const adminUpdateProjectSchema = z.object({
     clientName: z.string().min(1).max(100).optional(),
     scope: z.string().max(5000).optional(),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-    stage: z.enum(['UPCOMING', 'DESIGN', 'DEVELOPMENT', 'QA', 'SEND_TO_CLIENT', 'ADMIN_REVIEW', 'SENT_TO_CLIENT', 'COMPLETED']).optional(),
+    stage: z.enum(['DISCOVERY', 'DESIGN', 'CLIENT_REVIEW', 'DEVELOPMENT', 'INTERNAL_QA', 'INTERNAL_APPROVAL', 'CLIENT_UAT', 'DEPLOYMENT', 'COMPLETED']).optional(),
     overallDeadline: z.string().datetime().refine(dateNotPast, "Deadline cannot be in the past").optional(),
     currentDeadline: z.string().datetime().refine(dateNotPast, "Deadline cannot be in the past").optional(),
 
@@ -58,6 +62,9 @@ export const adminUpdateProjectSchema = z.object({
     devChecklist: z.array(checklistItemSchema).max(50).optional(),
     qaChecklist: z.array(checklistItemSchema).max(50).optional(),
     finalChecklist: z.array(checklistItemSchema).max(50).optional(),
+    clientReviewChecklist: z.array(checklistItemSchema).max(50).optional(),
+    clientUatChecklist: z.array(checklistItemSchema).max(50).optional(),
+    deploymentChecklist: z.array(checklistItemSchema).max(50).optional(),
 
     // History Trigger
     newHistoryItem: z.object({
@@ -83,6 +90,9 @@ export const memberUpdateProjectSchema = z.object({
     devChecklist: z.array(checklistItemSchema).max(50).optional(),
     qaChecklist: z.array(checklistItemSchema).max(50).optional(),
     finalChecklist: z.array(checklistItemSchema).max(50).optional(),
+    clientReviewChecklist: z.array(checklistItemSchema).max(50).optional(),
+    clientUatChecklist: z.array(checklistItemSchema).max(50).optional(),
+    deploymentChecklist: z.array(checklistItemSchema).max(50).optional(),
 
     // Members can trigger specific history items related to their work
     newHistoryItem: z.object({
@@ -99,13 +109,9 @@ export const addCommentSchema = z.object({
 }).strict();
 
 export const advanceStageSchema = z.object({
-    nextStage: z.enum(['UPCOMING', 'DESIGN', 'DEVELOPMENT', 'QA', 'SEND_TO_CLIENT', 'ADMIN_REVIEW', 'SENT_TO_CLIENT', 'COMPLETED']),
-    // VERSION ENFORCEMENT: Required for optimistic locking
-    version: z.number().int().positive()
-}).strict();
-
-export const recordQAFeedbackSchema = z.object({
-    passed: z.boolean(),
+    nextStage: z.enum(['DISCOVERY', 'DESIGN', 'CLIENT_REVIEW', 'DEVELOPMENT', 'INTERNAL_QA', 'INTERNAL_APPROVAL', 'CLIENT_UAT', 'DEPLOYMENT', 'COMPLETED']),
+    revertReasonCategory: z.enum(['DESIGN_CLARIFICATION', 'DEV_IMPLEMENTATION_BUG', 'QA_MISS', 'CLIENT_CHANGE_REQUEST', 'SCOPE_EXPANSION', 'PERFORMANCE_ISSUE', 'CONTENT_MISSING', 'OTHER']).optional(),
+    revertReasonNote: z.string().optional(),
     // VERSION ENFORCEMENT: Required for optimistic locking
     version: z.number().int().positive()
 }).strict();
@@ -143,4 +149,28 @@ export const updateTeamMemberSchema = z.object({
 
 export const deleteTeamMemberSchema = z.object({
     version: z.number().int().positive()
+}).strict();
+
+// === PHASE 1.5: CHECKLIST TEMPLATES ===
+export const createChecklistTemplateSchema = z.object({
+    stage: z.enum(['DISCOVERY', 'DESIGN', 'CLIENT_REVIEW', 'DEVELOPMENT', 'INTERNAL_QA', 'INTERNAL_APPROVAL', 'CLIENT_UAT', 'DEPLOYMENT', 'COMPLETED']),
+    name: z.string().min(1).max(100),
+    description: z.string().max(500).optional(),
+    isDefault: z.boolean().optional(),
+    items: z.array(z.object({
+        id: z.string().optional(),
+        label: z.string().min(1).max(500),
+        required: z.boolean().optional()
+    })).max(100)
+}).strict();
+
+export const updateChecklistTemplateSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    description: z.string().max(500).optional().nullable(),
+    isDefault: z.boolean().optional(),
+    items: z.array(z.object({
+        id: z.string().optional(),
+        label: z.string().min(1).max(500),
+        required: z.boolean().optional()
+    })).max(100).optional()
 }).strict();

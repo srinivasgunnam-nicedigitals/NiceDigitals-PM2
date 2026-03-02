@@ -77,10 +77,10 @@ export const DailyReportModal: React.FC<DailyReportModalProps> = ({ onClose }) =
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {activeProjects.map(project => {
                     const deadlineDate = project.currentDeadline ? parseISO(project.currentDeadline) : parseISO(project.overallDeadline);
-                    const progress = project.stage === ProjectStage.UPCOMING ? 0 :
+                    const progress = project.stage === ProjectStage.DISCOVERY ? 0 :
                       project.stage === ProjectStage.DESIGN ? 20 :
                         project.stage === ProjectStage.DEVELOPMENT ? 40 :
-                          project.stage === ProjectStage.QA ? 60 : 80;
+                          project.stage === ProjectStage.INTERNAL_QA ? 60 : 80;
 
                     return (
                       <tr key={project.id} className="hover:bg-indigo-50/30 dark:hover:bg-indigo-900/20 transition-colors">

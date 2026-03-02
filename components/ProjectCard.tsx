@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useUsers } from '../hooks/useUsers';
 import { useUpdateProject } from '../hooks/useProjectMutations';
 import { Card, Badge } from './ui';
+import { ExecutionHealthBadge } from './ExecutionHealth';
 
 interface ProjectCardProps {
   project: Project;
@@ -88,6 +89,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick }) =>
           {PRIORITY_CONFIG[project.priority].label}
         </Badge>
       </div>
+
+      {/* Execution Health Badge */}
+      {project.stage !== 'COMPLETED' && (
+        <ExecutionHealthBadge projectId={project.id} />
+      )}
 
       {/* Progress Bar & Count */}
       <div className="flex flex-col gap-1.5">

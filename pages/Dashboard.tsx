@@ -4,7 +4,7 @@ import { useProjectStats, useDevRankings } from '../hooks/useDashboard';
 import { useProjectsQuery } from '../hooks/useProjectsQuery';
 import { useKanbanQuery, ORDERED_STAGES, KanbanStage } from '../hooks/useKanbanQuery';
 import { useUsers } from '../hooks/useUsers';
-import { useDeleteProject, useBatchProjects } from '../hooks/useProjectMutations';
+import { useDeleteProject } from '../hooks/useProjectMutations';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../ThemeContext';
 import { useModal } from '../hooks/useModal';
@@ -13,9 +13,11 @@ import { ProjectCard } from '../components/ProjectCard';
 import { ProjectDetailModal } from '../components/ProjectDetailModal';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonCard, SkeletonStat, SkeletonChart } from '../components/Skeleton';
+import { getAvatarUrl } from '../utils/avatar';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
-import { BulkActionToolbar } from '../components/BulkActionToolbar';
 import { Button } from '../components/ui';
+import { DisciplineDashboard } from '../components/DisciplineDashboard';
+import { CalibrationDashboard } from '../components/CalibrationDashboard';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import {
   Trophy,
@@ -100,7 +102,7 @@ const AdminOverview = () => {
   const overdueCount = projects.filter(p => p.isDelayed && p.stage !== ProjectStage.COMPLETED).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 xl:grid-cols-5 gap-4">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => <SkeletonStat key={i} />)
@@ -112,10 +114,10 @@ const AdminOverview = () => {
             { label: 'Overdue Projects', value: projectStats?.delayed || 0, icon: <AlertIcon size={18} />, color: 'text-red-600', bg: 'bg-red-50' },
             { label: 'Completed', value: projectStats?.completed || 0, icon: <CheckCircle size={18} />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
           ].map((stat, i) => (
-            <div key={i} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200/60 dark:border-slate-700 shadow-sm flex items-center justify-between">
+            <div key={i} className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-transparent dark:border-slate-700/50 shadow-sm flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">{stat.label}</p>
-                <h4 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">{stat.value}</h4>
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                <h4 className="text-2xl font-semibold text-slate-900 dark:text-slate-100 tracking-tight">{stat.value}</h4>
               </div>
               <div className={`w-10 h-10 ${stat.bg} ${stat.color} rounded-lg flex items-center justify-center`}>
                 {stat.icon}
@@ -125,8 +127,17 @@ const AdminOverview = () => {
         )}
       </div>
 
+      <div>
+        <DisciplineDashboard />
+      </div>
+
+      <div>
+        <h2 className="text-xl font-semibold tracking-tight text-slate-800 dark:text-slate-100 mb-5">Engine Calibration</h2>
+        <CalibrationDashboard />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl border border-transparent dark:border-slate-700/50 shadow-sm">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
               <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -198,7 +209,7 @@ const AdminOverview = () => {
             {rankings.slice(0, 4).map((rank, i) => (
               <div key={rank.userId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                 <span className="text-[11px] font-bold text-slate-400 w-4">0{i + 1}</span>
-                <img src={users.find(u => u.id === rank.userId)?.avatar || `https://picsum.photos/seed/${rank.userId}/32/32`} className="w-8 h-8 rounded-md" alt="" />
+                <img src={getAvatarUrl(users.find(u => u.id === rank.userId)?.name || rank.userName, users.find(u => u.id === rank.userId)?.avatar)} className="w-8 h-8 rounded-md" alt="" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate">{rank.userName}</p>
                   <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
@@ -228,7 +239,6 @@ interface KanbanColumnProps {
 const KanbanColumn = ({ stage, projects, total, hasMore, onProjectClick, onAddProject }: KanbanColumnProps) => {
   const { currentUser } = useAuth();
   const deleteProjectMutation = useDeleteProject();
-  const batchProjectsMutation = useBatchProjects();
   const { showConfirm, showPrompt } = useModal();
 
   // Use server-reported total (accurate across all pages) or fall back to loaded count
@@ -253,7 +263,14 @@ const KanbanColumn = ({ stage, projects, total, hasMore, onProjectClick, onAddPr
         )}
       </div>
       <div className="flex-1 space-y-3 bg-slate-100/50 dark:bg-slate-800/40 p-2 rounded-xl border border-slate-200/40 dark:border-slate-700/40 min-h-[400px]">
-        {projects.map(project => {
+        {projects.length === 0 ? (
+          <div className="p-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-center min-h-[120px] bg-slate-50/50 dark:bg-slate-800/30">
+            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+              <Archive size={14} className="opacity-50" /> Empty
+            </span>
+          </div>
+        ) : (
+        projects.map(project => {
           const allTasks = [
             ...(project.designChecklist || []),
             ...(project.devChecklist || []),
@@ -332,7 +349,7 @@ const KanbanColumn = ({ stage, projects, total, hasMore, onProjectClick, onAddPr
               <div className="flex items-center justify-between">
                 <div className="flex -space-x-1.5">
                   {[project.assignedDesignerId, project.assignedDevManagerId].filter(Boolean).slice(0, 2).map(id => (
-                    <img key={id} src={`https://picsum.photos/seed/${id}/24/24`} className="w-5 h-5 rounded ring-2 ring-white dark:ring-slate-800" alt="" />
+                    <img key={id} src={getAvatarUrl('Team')} className="w-5 h-5 rounded ring-2 ring-white dark:ring-slate-800" alt="" />
                   ))}
                 </div>
                 <div className="flex flex-col items-end gap-1">
@@ -343,13 +360,7 @@ const KanbanColumn = ({ stage, projects, total, hasMore, onProjectClick, onAddPr
               </div>
             </div>
           );
-        })}
-        {projects.length === 0 && (
-          <EmptyState
-            icon={FolderOpen}
-            title="No projects yet"
-            description="This stage is empty. Projects will appear here as they progress."
-          />
+        })
         )}
       </div>
     </div>
@@ -360,12 +371,10 @@ const RoleSpecificDashboard = () => {
   const { currentUser } = useAuth();
   const { board, columns, isLoading } = useKanbanQuery(20);
   const { users } = useUsers();
-  const batchProjectsMutation = useBatchProjects();
   const deleteProjectMutation = useDeleteProject();
   const { theme } = useTheme();
   const [viewMode, setViewMode] = useState<'board' | 'grid'>('board');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
 
   // All loaded items across all stages (for grid view, bulk ops, and modal lookup)
   const allProjects = useMemo(() => columns.flatMap(c => c.column.items), [columns]);
@@ -399,47 +408,6 @@ const RoleSpecificDashboard = () => {
     );
   }, [allProjects, currentUser]);
 
-  const toggleProjectSelection = (projectId: string) => {
-    setSelectedProjects(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(projectId)) {
-        newSet.delete(projectId);
-      } else {
-        newSet.add(projectId);
-      }
-      return newSet;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedProjects.size === filteredProjects.length) {
-      setSelectedProjects(new Set());
-    } else {
-      setSelectedProjects(new Set(filteredProjects.map(p => p.id)));
-    }
-  };
-
-  const clearSelection = () => setSelectedProjects(new Set());
-
-  const handleBulkStageChange = (stage: ProjectStage) => {
-    batchProjectsMutation.mutate({ operation: 'UPDATE_STAGE', projectIds: Array.from(selectedProjects), payload: { stage } });
-    clearSelection();
-  };
-
-  const handleBulkAssign = (userId: string, role: 'designer' | 'dev' | 'qa') => {
-    batchProjectsMutation.mutate({ operation: 'ASSIGN_USER', projectIds: Array.from(selectedProjects), payload: { userId, role } });
-    clearSelection();
-  };
-
-  const handleBulkArchive = () => {
-    batchProjectsMutation.mutate({ operation: 'ARCHIVE', projectIds: Array.from(selectedProjects), payload: {} });
-    clearSelection();
-  };
-
-  const handleBulkDelete = () => {
-    batchProjectsMutation.mutate({ operation: 'DELETE', projectIds: Array.from(selectedProjects), payload: {} });
-    clearSelection();
-  };
 
   const activeStages = ORDERED_STAGES;
   const BOARD_SCALE_WARN = 200;
@@ -526,18 +494,6 @@ const RoleSpecificDashboard = () => {
 
       {selectedProject && <ProjectDetailModal project={selectedProject} onClose={() => setSelectedProjectId(null)} />}
 
-      {selectedProjects.size > 0 && (
-        <BulkActionToolbar
-          selectedCount={selectedProjects.size}
-          onClearSelection={clearSelection}
-          onBulkStageChange={handleBulkStageChange}
-          onBulkAssign={handleBulkAssign}
-          onBulkArchive={handleBulkArchive}
-          onBulkDelete={handleBulkDelete}
-          users={users}
-          currentUser={currentUser}
-        />
-      )}
 
       {/* Kanban Status Bar */}
       <div className="sticky bottom-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-8 py-3 shadow-lg z-20">

@@ -14,7 +14,7 @@ const getBaseURL = () => {
 };
 
 // Create axios instance with base URL from environment variable
-const api = axios.create({
+export const api = axios.create({
     baseURL: getBaseURL(),
     headers: {
         'Content-Type': 'application/json',
@@ -169,27 +169,6 @@ export const backendApi = {
         return response.data;
     },
 
-    // Batch operations
-    batchUpdateProjects: async (request: {
-        operation: 'UPDATE_STAGE' | 'ASSIGN_USER' | 'ARCHIVE' | 'DELETE';
-        projectIds: string[];
-        payload: Record<string, any>;
-    }) => {
-        const response = await api.post<{
-            success: boolean;
-            totalRequested: number;
-            totalSucceeded: number;
-            totalFailed: number;
-            results: Array<{
-                projectId: string;
-                success: boolean;
-                error?: string;
-                errorCode?: string;
-            }>;
-        }>('projects/batch', request);
-        return response.data;
-    },
-
     deleteProject: async (id: string) => {
         const response = await api.delete(`projects/${id}`);
         return response.data;
@@ -211,23 +190,24 @@ export const backendApi = {
         return response.data;
     },
 
-    // NEW SECURE ENDPOINTS: Stage advancement and QA feedback
-    // These replace the old client-side scoring logic
-    advanceProjectStage: async (projectId: string, nextStage: string, version: number) => {
+    // Secure stage advancement — single pipeline for ALL transitions (forward + backward)
+    advanceProjectStage: async (
+        projectId: string,
+        nextStage: string,
+        version: number,
+        revertReasonCategory?: string,
+        revertReasonNote?: string
+    ) => {
         // VERSION ENFORCEMENT: Prevent accidental omission
         if (version === undefined || version === null) {
             throw new Error('VERSION_REQUIRED: version is mandatory for stage advancement');
         }
-        const response = await api.post<Project>(`projects/${projectId}/advance-stage`, { nextStage, version });
-        return response.data;
-    },
-
-    recordQAFeedback: async (projectId: string, passed: boolean, version: number) => {
-        // VERSION ENFORCEMENT: Prevent accidental omission
-        if (version === undefined || version === null) {
-            throw new Error('VERSION_REQUIRED: version is mandatory for QA feedback');
+        const body: Record<string, any> = { nextStage, version };
+        if (revertReasonCategory) {
+            body.revertReasonCategory = revertReasonCategory;
+            body.revertReasonNote = revertReasonNote;
         }
-        const response = await api.post<Project>(`projects/${projectId}/qa-feedback`, { passed, version });
+        const response = await api.post<Project>(`projects/${projectId}/advance-stage`, body);
         return response.data;
     },
 

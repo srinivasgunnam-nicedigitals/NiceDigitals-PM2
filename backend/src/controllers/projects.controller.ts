@@ -10,7 +10,6 @@ import {
     memberUpdateProjectSchema,
     addCommentSchema,
     advanceStageSchema,
-    recordQAFeedbackSchema,
     changeDeadlineSchema,
     reassignLeadSchema,
     addTeamMemberSchema,
@@ -31,25 +30,31 @@ export const getProjectStats = async (req: Request, res: Response, next: NextFun
             throw AppError.unauthorized('Unauthorized: No tenant', 'NO_TENANT');
         }
 
-        const [upcoming, design, dev, qa, review, completed, delayed] = await Promise.all([
-            prisma.project.count({ where: { tenantId, stage: ProjectStage.UPCOMING } }),
+        const [discovery, design, dev, internalQa, internalApproval, clientReview, clientUat, deployment, completed, delayed] = await Promise.all([
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.DISCOVERY } }),
             prisma.project.count({ where: { tenantId, stage: ProjectStage.DESIGN } }),
             prisma.project.count({ where: { tenantId, stage: ProjectStage.DEVELOPMENT } }),
-            prisma.project.count({ where: { tenantId, stage: ProjectStage.QA } }),
-            prisma.project.count({ where: { tenantId, stage: ProjectStage.ADMIN_REVIEW } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.INTERNAL_QA } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.INTERNAL_APPROVAL } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.CLIENT_REVIEW } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.CLIENT_UAT } }),
+            prisma.project.count({ where: { tenantId, stage: ProjectStage.DEPLOYMENT } }),
             prisma.project.count({ where: { tenantId, stage: ProjectStage.COMPLETED } }),
             prisma.project.count({ where: { tenantId, isDelayed: true, stage: { not: ProjectStage.COMPLETED } } }),
         ]);
 
         res.json({
-            upcoming,
+            discovery,
             design,
             dev,
-            qa,
-            review,
+            internalQa,
+            internalApproval,
+            clientReview,
+            clientUat,
+            deployment,
             completed,
             delayed,
-            totalActive: upcoming + design + dev + qa + review
+            totalActive: discovery + design + dev + internalQa + internalApproval + clientReview + clientUat + deployment
         });
     } catch (error) {
         next(error);
@@ -265,13 +270,51 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
             }
         }
 
+        let designChecklist = p.designChecklist ?? [];
+        let devChecklist = p.devChecklist ?? [];
+        let qaChecklist = p.qaChecklist ?? [];
+        let finalChecklist = p.finalChecklist ?? [];
+        let clientReviewChecklist = p.clientReviewChecklist ?? [];
+        let clientUatChecklist = p.clientUatChecklist ?? [];
+        let deploymentChecklist = p.deploymentChecklist ?? [];
+
+        if (p.useDefaultChecklists) {
+            const templates = await prisma.checklistTemplate.findMany({
+                where: { tenantId, isDefault: true, isArchived: false }
+            });
+
+            const cloneItems = (items: any) => {
+                if (!Array.isArray(items)) return [];
+                return items.map((item: any) => ({
+                    id: crypto.randomUUID(),
+                    label: item.label,
+                    completed: false,
+                    ...(item.required !== undefined && { required: item.required })
+                }));
+            };
+
+            for (const template of templates) {
+                switch (template.stage) {
+                    case 'DESIGN': designChecklist = cloneItems(template.items); break;
+                    case 'DEVELOPMENT': devChecklist = cloneItems(template.items); break;
+                    case 'INTERNAL_QA': qaChecklist = cloneItems(template.items); break;
+                    case 'INTERNAL_APPROVAL': finalChecklist = cloneItems(template.items); break;
+                    case 'CLIENT_REVIEW': clientReviewChecklist = cloneItems(template.items); break;
+                    case 'CLIENT_UAT': clientUatChecklist = cloneItems(template.items); break;
+                    case 'DEPLOYMENT': deploymentChecklist = cloneItems(template.items); break;
+                }
+            }
+        }
+
         // SERVER-SIDE History Generation
         const initialHistory = {
             create: {
-                stage: ProjectStage.UPCOMING,
+                stage: ProjectStage.DISCOVERY,
                 action: 'Project Created',
                 timestamp: new Date(),
                 userId: userId,
+                performedByUserId: userId,
+                performedByRole: (req.user?.role as UserRole) || UserRole.ADMIN,
                 tenantId: tenantId
             }
         };
@@ -285,7 +328,7 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
                     clientName: p.clientName,
                     scope: sanitizedScope,
                     priority: p.priority,
-                    stage: ProjectStage.UPCOMING, // Enforce start stage
+                    stage: ProjectStage.DISCOVERY, // Enforce start stage
                     overallDeadline: p.overallDeadline,
                     currentDeadline: p.currentDeadline ?? null,
 
@@ -295,16 +338,19 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
                     assignedQAId: p.assignedQAId ?? null,
 
                     // Checklists
-                    designChecklist: p.designChecklist ?? [],
-                    devChecklist: p.devChecklist ?? [],
-                    qaChecklist: p.qaChecklist ?? [],
-                    finalChecklist: p.finalChecklist ?? [],
+                    designChecklist,
+                    devChecklist,
+                    qaChecklist,
+                    finalChecklist,
+                    clientReviewChecklist,
+                    clientUatChecklist,
+                    deploymentChecklist,
 
                     isDelayed: false,
                     qaFailCount: 0,
-
                     // Server-generated timestamps
                     createdAt: new Date(),
+                    enteredStageAt: new Date(),
                     completedAt: null,
 
                     tenantId: tenantId,
@@ -778,87 +824,25 @@ export const addComment = async (req: Request, res: Response, next: NextFunction
 export const advanceStage = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { id } = req.params;
-        const { nextStage, version } = advanceStageSchema.parse(req.body);
+        const { nextStage, version, revertReasonCategory, revertReasonNote } = advanceStageSchema.parse(req.body);
         const userId = req.user?.id;
         const tenantId = req.user?.tenantId;
+        const userRole = req.user?.role;
 
-        if (!userId || !tenantId) {
+        if (!userId || !tenantId || !userRole) {
             throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
         }
         // nextStage and version checks handled by Zod
-
-        // RBAC: Only admins or users assigned to the project can advance stage
-        const projectForRbac = await prisma.project.findFirst({
-            where: { id, tenantId },
-            select: { assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true }
-        });
-
-        if (!projectForRbac) {
-            throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
-        }
-
-        const isAdmin = req.user?.role === UserRole.ADMIN;
-        const isAssigned =
-            projectForRbac.assignedDesignerId === userId ||
-            projectForRbac.assignedDevManagerId === userId ||
-            projectForRbac.assignedQAId === userId;
-
-        if (!isAdmin && !isAssigned) {
-            throw AppError.forbidden('You are not assigned to this project', 'NOT_ASSIGNED');
-        }
 
         const updatedProject = await projectsService.advanceProjectStage({
             projectId: id,
             nextStage,
             userId,
+            userRole,
             tenantId,
-            version // VERSION ENFORCEMENT: Pass to service layer
-        });
-
-        res.json(updatedProject);
-    } catch (error) {
-        next(error);
-    }
-};
-
-export const recordQAFeedback = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { id } = req.params;
-        const { passed, version } = recordQAFeedbackSchema.parse(req.body);
-        const userId = req.user?.id;
-        const tenantId = req.user?.tenantId;
-
-        if (!userId || !tenantId) {
-            throw AppError.unauthorized('Unauthorized', 'NO_TENANT');
-        }
-        // passed and version checks handled by Zod
-
-        // RBAC: Only admins or users assigned to the project can submit QA feedback
-        const projectForRbac = await prisma.project.findFirst({
-            where: { id, tenantId },
-            select: { assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true }
-        });
-
-        if (!projectForRbac) {
-            throw AppError.notFound('Project not found', 'PROJECT_NOT_FOUND');
-        }
-
-        const isAdmin = req.user?.role === UserRole.ADMIN;
-        const isAssigned =
-            projectForRbac.assignedDesignerId === userId ||
-            projectForRbac.assignedDevManagerId === userId ||
-            projectForRbac.assignedQAId === userId;
-
-        if (!isAdmin && !isAssigned) {
-            throw AppError.forbidden('You are not assigned to this project', 'NOT_ASSIGNED');
-        }
-
-        const updatedProject = await projectsService.recordQAFeedback({
-            projectId: id,
-            passed,
-            userId,
-            tenantId,
-            version // VERSION ENFORCEMENT: Pass to service layer
+            version, // VERSION ENFORCEMENT: Pass to service layer
+            revertReasonCategory: revertReasonCategory as any,
+            revertReasonNote
         });
 
         res.json(updatedProject);
