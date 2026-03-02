@@ -38,6 +38,7 @@ export enum Priority {
 
 export interface User {
   id: string;
+  tenantId: string;
   name: string;
   username?: string;
   email: string;
@@ -79,13 +80,6 @@ export interface Comment {
   timestamp: string;
 }
 
-export interface ScoreEntry {
-  projectId: string;
-  date: string;
-  points: number;
-  reason: string;
-}
-
 export interface HistoryItem {
   stage: ProjectStage;
   toStage?: ProjectStage;
@@ -107,6 +101,15 @@ export interface Project {
   stage: ProjectStage;
   overallDeadline: string;
   currentDeadline?: string;
+  
+  // Track B Phase 1 Deadline fields
+  designDeadline?: string | null;
+  developmentDeadline?: string | null;
+  internalQaDeadline?: string | null;
+  approvalDeadline?: string | null;
+  clientReviewDeadline?: string | null;
+  clientUatDeadline?: string | null;
+  deploymentDeadline?: string | null;
 
   assignedDesignerId?: string;
   assignedDevManagerId?: string;

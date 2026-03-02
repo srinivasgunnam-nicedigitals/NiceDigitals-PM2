@@ -5,18 +5,9 @@ import { logAudit } from '../utils/audit';
 import { realtimeService } from '../realtime/RealtimeService';
 import { computeExecutionHealth } from './execution-health.service';
 import { invalidateHealthCache } from './health-cache';
+import { recordLeaderboardEvent } from './leaderboard.service';
 import { ProjectStage, UserRole, RevertReasonCategory } from '@prisma/client';
 
-// Scoring rules
-const SCORING_RULES = {
-    DELIVERY: 10,
-    ON_TIME: 5,
-    QA_FIRST_PASS: 2,
-    EARLY_PER_DAY: 1,
-    QA_REJECTION: -5,
-    DEADLINE_MISSED: -10,
-    DELAY_PER_DAY: -2,
-};
 
 export const VALID_TRANSITIONS: Record<string, string[]> = {
     'DISCOVERY': ['DESIGN'],
@@ -74,7 +65,10 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
             id: true, stage: true, version: true, 
             assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, 
             overallDeadline: true, qaFailCount: true, qaChecklist: true, tenantId: true,
-            devChecklist: true, designChecklist: true, finalChecklist: true
+            devChecklist: true, designChecklist: true, finalChecklist: true,
+            designDeadline: true, developmentDeadline: true, internalQaDeadline: true,
+            approvalDeadline: true, clientReviewDeadline: true, clientUatDeadline: true,
+            deploymentDeadline: true
         }
     });
 
@@ -194,47 +188,11 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
     }
 
     let completedAt: string | null = null;
-    const scoresToCreate: any[] = [];
 
-    // Scoring logic (Simplified for Phase 1, robust in Phase 2)
-    if (nextStage === 'COMPLETED' && project.assignedDevManagerId) {
-        const today = new Date();
-        const overallDeadline = new Date(project.overallDeadline);
-
-        scoresToCreate.push({
-            projectId: project.id,
-            userId: project.assignedDevManagerId,
-            points: SCORING_RULES.DELIVERY,
-            reason: 'Project Delivery',
-            date: today.toISOString(),
-            tenantId
-        });
-
-        if (differenceInDays(overallDeadline, today) >= 0) {
-            scoresToCreate.push({
-                projectId: project.id,
-                userId: project.assignedDevManagerId,
-                points: SCORING_RULES.ON_TIME,
-                reason: 'On-Time Bonus',
-                date: today.toISOString(),
-                tenantId
-            });
-        } else {
-            scoresToCreate.push({
-                projectId: project.id,
-                userId: project.assignedDevManagerId,
-                points: SCORING_RULES.DEADLINE_MISSED,
-                reason: 'Deadline Missed Penalty',
-                date: today.toISOString(),
-                tenantId
-            });
-        }
-        completedAt = today.toISOString();
-    }
-
-    // 7. Snapshot execution health BEFORE marking COMPLETED (for calibration)
+    // Snapshot execution health BEFORE marking COMPLETED (for calibration)
     let healthAtCompletion: number | null = null;
     if (nextStage === 'COMPLETED') {
+        completedAt = new Date().toISOString();
         try {
             const health = await computeExecutionHealth(projectId);
             healthAtCompletion = health.executionHealth;
@@ -242,28 +200,6 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
             // Non-blocking: if health compute fails, we still complete the project
             healthAtCompletion = null;
         }
-    }
-
-    if (project.stage === 'INTERNAL_QA' && nextStage === 'INTERNAL_APPROVAL' && (project.qaFailCount === 0 || project.qaFailCount === null) && project.assignedDevManagerId) {
-        scoresToCreate.push({
-            projectId: project.id,
-            userId: project.assignedDevManagerId,
-            points: SCORING_RULES.QA_FIRST_PASS,
-            reason: 'QA First Pass Bonus',
-            date: new Date().toISOString(),
-            tenantId
-        });
-    }
-
-    if (project.stage === 'INTERNAL_QA' && nextStage === 'DEVELOPMENT' && project.assignedDevManagerId) {
-        scoresToCreate.push({
-            projectId: project.id,
-            userId: project.assignedDevManagerId,
-            points: SCORING_RULES.QA_REJECTION,
-            reason: 'QA Rejection Penalty',
-            date: new Date().toISOString(),
-            tenantId
-        });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -328,9 +264,57 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
             });
         }
 
-        for (const score of scoresToCreate) {
-            await tx.scoreEntry.create({ data: { ...score } });
+        // C2: Punctuality Evaluator (Execute BEFORE Leaderboard Events)
+        let punctualityEvent: { eventType: 'STAGE_COMPLETED_ON_TIME' | 'STAGE_COMPLETED_LATE'; role: any; userId: string } | undefined;
+        
+        if (!isBackward) {
+            let deadline: Date | null | undefined;
+            let roleForPunctuality: any;
+            let assignedUserId: string | null | undefined;
+
+            switch (project.stage) {
+                case 'DESIGN':
+                    deadline = project.designDeadline; roleForPunctuality = 'DESIGNER'; assignedUserId = project.assignedDesignerId; break;
+                case 'DEVELOPMENT':
+                    deadline = project.developmentDeadline; roleForPunctuality = 'DEV_MANAGER'; assignedUserId = project.assignedDevManagerId; break;
+                case 'INTERNAL_QA':
+                    deadline = project.internalQaDeadline; roleForPunctuality = 'QA_ENGINEER'; assignedUserId = project.assignedQAId; break;
+                case 'INTERNAL_APPROVAL':
+                    deadline = project.approvalDeadline; roleForPunctuality = 'DEV_MANAGER'; assignedUserId = project.assignedDevManagerId; break;
+                case 'CLIENT_REVIEW':
+                    deadline = project.clientReviewDeadline; roleForPunctuality = 'DESIGNER'; assignedUserId = project.assignedDesignerId; break;
+                case 'CLIENT_UAT':
+                    deadline = project.clientUatDeadline; roleForPunctuality = 'DEV_MANAGER'; assignedUserId = project.assignedDevManagerId; break;
+                case 'DEPLOYMENT':
+                    deadline = project.deploymentDeadline; roleForPunctuality = 'DEV_MANAGER'; assignedUserId = project.assignedDevManagerId; break;
+            }
+
+            if (deadline && assignedUserId) {
+                const exitTime = new Date();
+                
+                if (exitTime <= new Date(deadline)) {
+                    punctualityEvent = { eventType: 'STAGE_COMPLETED_ON_TIME', role: roleForPunctuality, userId: assignedUserId };
+                } else {
+                    const latestRev = await tx.stageDeadlineRevision.findFirst({
+                        where: { projectId: project.id, stage: project.stage as any, createdAt: { lte: exitTime } },
+                        orderBy: { createdAt: 'desc' }
+                    });
+
+                    const resp = latestRev?.delayResponsibility || 'INTERNAL';
+                    if (resp === 'INTERNAL') {
+                        punctualityEvent = { eventType: 'STAGE_COMPLETED_LATE', role: roleForPunctuality, userId: assignedUserId };
+                    }
+                }
+            }
         }
+
+        // Leaderboard V3: Record scoring event inside the same transaction
+        await recordLeaderboardEvent(tx, {
+            project,
+            nextStage,
+            revertReasonCategory: isBackward ? revertReasonCategory : undefined,
+            punctualityEvent
+        });
 
         await logAudit({
             action: 'STAGE_ADVANCED',
@@ -344,7 +328,7 @@ export async function advanceProjectStage(params: AdvanceStageParams) {
         return updatedProject;
     });
 
-    realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats', 'rankings', 'notifications']);
+    realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats', 'leaderboard', 'notifications']);
     invalidateHealthCache(projectId);
     return result;
 }

@@ -14,7 +14,8 @@ import {
     reassignLeadSchema,
     addTeamMemberSchema,
     updateTeamMemberSchema,
-    deleteTeamMemberSchema
+    deleteTeamMemberSchema,
+    updateStageDeadlineSchema
 } from '../utils/validation';
 import { logAudit } from '../utils/audit';
 import { AppError } from '../utils/AppError';
@@ -22,6 +23,11 @@ import { isBefore, startOfDay } from 'date-fns';
 
 import { sanitizeHtml } from '../utils/sanitize';
 import { realtimeService } from '../realtime/RealtimeService';
+import {
+    allocateInitialStageDeadlines,
+    recalculateFutureStageDeadlines,
+    updateSingleStageDeadline
+} from '../services/scheduling/stageDeadlineOrchestrator';
 
 export const getProjectStats = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -400,6 +406,16 @@ export const createProject = async (req: Request, res: Response, next: NextFunct
 
         // Emit AFTER response — new project changes list count, stats, and board
         realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats']);
+
+        // Track B: Auto-allocate stage deadlines if tenant config mandates it.
+        // Runs as a fire-and-forget after the response so latency is not affected.
+        // A failure here is non-blocking — the project is already created.
+        allocateInitialStageDeadlines({
+            projectId: newProject.id,
+            createdByUserId: userId,
+        }).catch((err) => {
+            console.error('[Track B] allocateInitialStageDeadlines failed for project', newProject.id, err);
+        });
     } catch (error) {
         next(error);
     }
@@ -420,7 +436,7 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
         // 1. Fetch Project to verify Ownership / Assignment
         const existing = await prisma.project.findUnique({
             where: { id },
-            select: { id: true, tenantId: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, stage: true, name: true, version: true, updatedAt: true, assignedDesigner: true, assignedDevManager: true, assignedQA: true }
+            select: { id: true, tenantId: true, assignedDesignerId: true, assignedDevManagerId: true, assignedQAId: true, stage: true, name: true, version: true, updatedAt: true, assignedDesigner: true, assignedDevManager: true, assignedQA: true, overallDeadline: true }
         });
 
         if (!existing || existing.tenantId !== tenantId) {
@@ -440,6 +456,9 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                 updatedAt: existing.updatedAt
             });
         }
+
+        // Capture old overallDeadline before the admin update for recalculation purposes
+        const previousOverallDeadline = (existing as any).overallDeadline as Date | undefined;
 
         // ===================================
         // PATH A: ADMIN AUTHORITY (Full Access)
@@ -469,13 +488,16 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
                 }
             }
 
-            // Stage Validation
+            // STAGE MUTATION GUARD: Stage changes MUST go through advanceProjectStage()
+            // This ensures leaderboard scoring, history, and health snapshots always run.
             if (sanitizedUpdates.stage && sanitizedUpdates.stage !== existing.stage) {
-                const allowed = projectsService.VALID_TRANSITIONS[existing.stage] || [];
-                if (!allowed.includes(sanitizedUpdates.stage)) {
-                    throw AppError.badRequest(`Invalid stage transition: Cannot move from ${existing.stage} to ${sanitizedUpdates.stage}`, 'INVALID_TRANSITION');
-                }
+                throw AppError.badRequest(
+                    'Stage changes must use the advance-stage endpoint to ensure scoring integrity',
+                    'USE_ADVANCE_STAGE'
+                );
             }
+            // Strip stage from updates even if same value (no-op protection)
+            delete (sanitizedUpdates as any).stage;
 
             // Admin History Generation
             let historyCreate = undefined;
@@ -590,6 +612,26 @@ export const updateProject = async (req: Request, res: Response, next: NextFunct
 
             // Emit AFTER transaction — admin update changes project state on the board
             realtimeService.emitInvalidate(tenantId, ['projects', 'kanban', 'projectStats']);
+
+            // Track B: If overallDeadline changed and autoAllocate is enabled,
+            // recalculate future stage deadlines. Fire-and-forget after response.
+            const newOverallDeadline = sanitizedUpdates.overallDeadline as Date | undefined;
+            if (
+                newOverallDeadline &&
+                previousOverallDeadline &&
+                newOverallDeadline.getTime() !== previousOverallDeadline.getTime()
+            ) {
+                recalculateFutureStageDeadlines({
+                    projectId: id,
+                    changedByUserId: userId,
+                    previousOverallDeadline,
+                    newOverallDeadline,
+                    reason: 'Overall deadline updated by admin',
+                    delayResponsibility: 'INTERNAL',
+                }).catch((err) => {
+                    console.error('[Track B] recalculateFutureStageDeadlines failed for project', id, err);
+                });
+            }
 
             return res.json(sanitizeProject(updatedProject, tenantId));
         }
@@ -959,6 +1001,34 @@ export const deleteComment = async (req: Request, res: Response, next: NextFunct
         }
 
         await prisma.comment.delete({ where: { id: commentId } });
+
+        res.json({ success: true });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const updateStageDeadline = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { id, stage } = req.params;
+        const tenantId = req.user?.tenantId;
+        const userId = req.user?.id;
+        
+        if (!tenantId || !userId) {
+            throw AppError.unauthorized('Unauthorized', 'UNAUTHORIZED');
+        }
+
+        const validated = updateStageDeadlineSchema.parse(req.body);
+
+        await updateSingleStageDeadline({
+            projectId: id,
+            tenantId,
+            changedByUserId: userId,
+            stage: stage as any,
+            newDeadline: new Date(validated.newDeadline),
+            reason: validated.reason,
+            delayResponsibility: validated.delayResponsibility
+        });
 
         res.json({ success: true });
     } catch (error) {

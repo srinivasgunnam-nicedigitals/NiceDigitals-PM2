@@ -72,7 +72,7 @@ export function useAdvanceStage() {
       invalidateProjects(queryClient);
       queryClient.invalidateQueries({ queryKey: ['project', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['project-history', variables.id] });
-      queryClient.invalidateQueries({ queryKey: ['scores'] });
+      queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
     },
   });
 }

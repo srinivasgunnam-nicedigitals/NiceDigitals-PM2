@@ -1,0 +1,9 @@
+export const STAGE_ORDER = [
+  'DESIGN',
+  'DEVELOPMENT',
+  'INTERNAL_QA',
+  'INTERNAL_APPROVAL',
+  'CLIENT_REVIEW',
+  'CLIENT_UAT',
+  'DEPLOYMENT',
+] as const;

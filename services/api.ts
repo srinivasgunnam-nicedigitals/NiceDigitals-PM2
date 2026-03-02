@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Project, User, ScoreEntry, Comment, HistoryItem, ProjectTeamMember, TeamLeadRole } from '../types';
+import { Project, User, Comment, HistoryItem, ProjectTeamMember, TeamLeadRole } from '../types';
 
 const getBaseURL = () => {
     const rawUrl = import.meta.env.VITE_API_URL || 'http://localhost:3002';
@@ -231,16 +231,12 @@ export const backendApi = {
         await api.delete(`users/${id}`);
     },
 
-    // Scores (read-only)
-    // Scores are now ONLY created by backend during project lifecycle events
-    getScores: async () => {
-        const response = await api.get<ScoreEntry[]>('scores');
-        return response.data;
-    },
-
-    // Rankings
-    getRankings: async () => {
-        const response = await api.get<any[]>('rankings');
+    // Leaderboard V3
+    getLeaderboard: async (role: string, month?: number, year?: number) => {
+        const params: Record<string, string> = {};
+        if (month) params.month = String(month);
+        if (year) params.year = String(year);
+        const response = await api.get<any>(`leaderboard/${role}`, { params });
         return response.data;
     },
 
@@ -260,6 +256,43 @@ export const backendApi = {
 
     clearNotifications: async () => {
         await api.delete('notifications');
+    },
+
+    // ============================================
+    // PHASE 3A: TENANT SCHEDULING CONFIG
+    // ============================================
+
+    getSchedulingConfig: async (tenantId: string) => {
+        const response = await api.get<{
+            tenantId: string;
+            designRatio: number;
+            developmentRatio: number;
+            qaRatio: number;
+            approvalRatio: number;
+            overlapPercent: number;
+            autoAllocate: boolean;
+        }>(`tenants/${tenantId}/scheduling-config`);
+        return response.data;
+    },
+
+    updateSchedulingConfig: async (tenantId: string, data: {
+        designRatio: number;
+        developmentRatio: number;
+        qaRatio: number;
+        approvalRatio: number;
+        overlapPercent: number;
+        autoAllocate: boolean;
+    }) => {
+        const response = await api.put(`tenants/${tenantId}/scheduling-config`, data);
+        return response.data;
+    },
+
+    updateStageDeadline: async (
+        projectId: string, 
+        stage: string, 
+        data: { newDeadline: string; reason: string; delayResponsibility: string }
+    ) => {
+        return api.patch(`/projects/${projectId}/deadlines/${stage}`, data);
     },
 
     // ============================================

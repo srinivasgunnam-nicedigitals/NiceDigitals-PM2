@@ -22,9 +22,10 @@ import { useAuth } from '../contexts/AuthContext';
 
 type InvalidateKey =
   | 'projects'
+  | 'kanban'
   | 'projectStats'
   | 'notifications'
-  | 'rankings'
+  | 'leaderboard'
   | 'users';
 
 interface InvalidateEvent {

@@ -1,195 +1,205 @@
-
-import React from 'react';
-import { useDevRankings } from '../hooks/useDashboard';
-import { getAvatarUrl } from '../utils/avatar';
+import React, { useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { useLeaderboard } from '../hooks/useDashboard';
+import { useUsers } from '../hooks/useUsers';
+import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../ThemeContext';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Line,
-  Legend,
-  ComposedChart,
-} from 'recharts';
-import { TrendingUp, CheckCircle, AlertTriangle, Minus } from 'lucide-react';
+import { getAvatarUrl } from '../utils/avatar';
+import { Trophy, Medal, Award, TrendingUp, TrendingDown, Minus, Users, Crown, Star, Zap } from 'lucide-react';
 
-// Reusable N/A badge — shown when a metric has no underlying data
-const NaBadge = () => (
-  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-xs font-bold">
-    <Minus size={10} /> N/A
-  </span>
-);
+// ============================================================
+// Leaderboard V3 — Role-Based Monthly Rankings
+// ============================================================
 
-const Leaderboard = () => {
-  const { data: rankings = [] } = useDevRankings();
+const ROLE_TABS = [
+  { key: 'designer', label: 'Designers', icon: <Star size={15} /> },
+  { key: 'dev',      label: 'Dev Managers', icon: <Zap size={15} /> },
+  { key: 'qa',       label: 'QA Engineers', icon: <Award size={15} /> },
+] as const;
 
-  // Only devs with actual project data appear in charts — prevents false 100% bars
-  const activeRankings = rankings.filter(r => r.hasData);
+const MEDAL_STYLES = [
+  { bg: 'bg-amber-100 dark:bg-amber-900/30', ring: 'ring-amber-400', text: 'text-amber-600 dark:text-amber-400', icon: <Crown size={14} className="text-amber-500" /> },
+  { bg: 'bg-slate-100 dark:bg-slate-700/50', ring: 'ring-slate-400', text: 'text-slate-500 dark:text-slate-400', icon: <Medal size={14} className="text-slate-400" /> },
+  { bg: 'bg-orange-100 dark:bg-orange-900/30', ring: 'ring-orange-400', text: 'text-orange-600 dark:text-orange-400', icon: <Medal size={14} className="text-orange-400" /> },
+];
 
-  const chartData = activeRankings.map(r => ({
-    name: r.userName,
-    'First-Time Right %': r.qaFirstTimeRightRate ?? 0,
-    'On-Time %': r.onTimeDeliveryRate ?? 0,
-    Completed: r.completedProjects,
-  }));
-
+function Leaderboard() {
+  const [activeTab, setActiveTab] = useState<string>('dev');
+  const [filterMonth, setFilterMonth] = useState<number | undefined>();
+  const [filterYear, setFilterYear] = useState<number | undefined>();
+  const { currentUser } = useAuth();
+  const { users } = useUsers();
   const { theme } = useTheme();
-  const axisColor = theme === 'dark' ? '#cbd5e1' : '#64748b';
+  const isAdmin = currentUser?.role === 'ADMIN';
+
+  const { data, isLoading } = useLeaderboard(activeTab, filterMonth, filterYear);
+  const entries = data?.entries || [];
+  const displayMonth = data?.month || new Date().getMonth() + 1;
+  const displayYear = data?.year || new Date().getFullYear();
+
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   return (
-    <div className="p-8 space-y-8 animate-in fade-in duration-500 pb-12">
-      <div>
-        <h2 className="text-[24px] font-bold text-slate-900 dark:text-slate-100 tracking-tight leading-none">Performance Leaderboard</h2>
-        <p className="text-slate-500 dark:text-slate-400 font-medium">Monthly efficiency and quality rankings for Development Managers.</p>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 px-8 py-6 shadow-sm">
+        <div className="max-w-[1000px] mx-auto">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-amber-600 rounded-xl flex items-center justify-center shadow-lg shadow-amber-200/50 dark:shadow-amber-900/30">
+                <Trophy size={20} className="text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Leaderboard</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  {monthNames[displayMonth - 1]} {displayYear}
+                </p>
+              </div>
+            </div>
+
+            {isAdmin && (
+              <div className="flex items-center gap-2">
+                <select
+                  value={filterMonth || ''}
+                  onChange={(e) => setFilterMonth(e.target.value ? Number(e.target.value) : undefined)}
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                >
+                  <option value="">Current Month</option>
+                  {monthNames.map((m, i) => (
+                    <option key={i} value={i + 1}>{m}</option>
+                  ))}
+                </select>
+                <select
+                  value={filterYear || ''}
+                  onChange={(e) => setFilterYear(e.target.value ? Number(e.target.value) : undefined)}
+                  className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                >
+                  <option value="">Current Year</option>
+                  {[2024, 2025, 2026].map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Role Tabs */}
+          <div className="flex bg-slate-100 dark:bg-slate-700/50 p-1 rounded-xl gap-1">
+            {ROLE_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs font-bold transition-all duration-200 ${
+                  activeTab === tab.key
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 shadow-sm'
+                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Graphical Comparison — only rendered when active devs exist */}
-      {activeRankings.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white dark:bg-slate-800 p-8 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Efficiency vs. Quality</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Only devs with assigned projects are included</p>
+      <div className="max-w-[1000px] mx-auto px-8 py-8">
+        {isLoading ? (
+          <div className="space-y-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="bg-white dark:bg-slate-800 rounded-xl p-5 animate-pulse">
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 bg-slate-200 dark:bg-slate-700 rounded-lg" />
+                  <div className="w-10 h-10 bg-slate-200 dark:bg-slate-700 rounded-full" />
+                  <div className="flex-1">
+                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-32 mb-2" />
+                    <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded w-20" />
+                  </div>
+                  <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-12" />
+                </div>
               </div>
-              <TrendingUp className="w-5 h-5 text-indigo-500" />
-            </div>
-            <div className="h-[300px] mt-6">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#334155' : '#f1f5f9'} />
-                  <XAxis dataKey="name" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} tick={{ fill: axisColor }} />
-                  <YAxis domain={[0, 100]} fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} tick={{ fill: axisColor }} />
-                  <Tooltip
-                    cursor={{ fill: theme === 'dark' ? '#334155' : '#f8fafc' }}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', backgroundColor: theme === 'dark' ? '#1e293b' : '#fff' }}
-                    itemStyle={{ color: theme === 'dark' ? '#fff' : '#000' }}
-                    labelStyle={{ color: theme === 'dark' ? '#cbd5e1' : '#64748b', fontWeight: 'bold' }}
-                    formatter={(value: number) => [`${value}%`]}
-                  />
-                  <Legend verticalAlign="top" height={36} />
-                  <Bar dataKey="First-Time Right %" fill="#34d399" radius={[4, 4, 0, 0]} barSize={30} />
-                  <Line type="monotone" dataKey="On-Time %" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
+            ))}
           </div>
-
-          <div className="bg-white dark:bg-slate-800 p-8 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Completed Projects (This Month)</h3>
-              <CheckCircle className="w-5 h-5 text-emerald-500" />
+        ) : entries.length === 0 ? (
+          <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-16 text-center">
+            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-full mx-auto flex items-center justify-center mb-4">
+              <Users size={28} className="text-slate-400 dark:text-slate-500" />
             </div>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#334155' : '#f1f5f9'} />
-                  <XAxis dataKey="name" fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} tick={{ fill: axisColor }} />
-                  <YAxis fontSize={10} fontWeight="bold" axisLine={false} tickLine={false} tick={{ fill: axisColor }} />
-                  <Tooltip
-                    cursor={{ fill: theme === 'dark' ? '#334155' : '#f8fafc' }}
-                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', backgroundColor: theme === 'dark' ? '#1e293b' : '#fff' }}
-                    itemStyle={{ color: theme === 'dark' ? '#fff' : '#000' }}
-                    labelStyle={{ color: theme === 'dark' ? '#cbd5e1' : '#64748b', fontWeight: 'bold' }}
-                  />
-                  <Bar dataKey="Completed" fill="#818cf8" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-2">No Rankings Yet</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+              Rankings will appear here once projects start moving through the pipeline this month.
+            </p>
           </div>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center shadow-sm">
-          <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
-          <p className="font-bold text-slate-700 dark:text-slate-300">No chart data available yet</p>
-          <p className="text-sm text-slate-400 mt-1">Charts appear once Dev Managers have been assigned to at least one project.</p>
-        </div>
-      )}
+        ) : (
+          <div className="space-y-3">
+            {entries.map((entry: any, index: number) => {
+              const medalStyle = MEDAL_STYLES[index] || null;
+              const isTop3 = index < 3;
+              const user = users.find((u) => u.id === entry.userId);
 
-      {/* Performance Matrix Table */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
-        <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Performance Matrix</h3>
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Active Ranking Cycle</span>
-        </div>
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50 dark:bg-slate-900/50">
-              <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Manager</th>
-              <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">First-Time Right %</th>
-              <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">On-Time %</th>
-              <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest">Completed</th>
-              <th className="px-8 py-4 text-xs font-bold text-slate-400 uppercase tracking-widest text-right">Monthly Score</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-            {rankings.map((rank, i) => {
-              const isInactive = !rank.hasData;
-              // Rank number only counts active devs
-              const activeRank = activeRankings.findIndex(r => r.userId === rank.userId);
               return (
-                <tr key={rank.userId} className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors ${isInactive ? 'opacity-50' : ''}`}>
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-4">
-                      {isInactive ? (
-                        <span className="w-6 text-xs font-black text-slate-300 dark:text-slate-600">—</span>
-                      ) : (
-                        <span className={`w-6 text-xs font-black ${activeRank === 0 ? 'text-amber-500' : 'text-slate-300 dark:text-slate-500'}`}>
-                          #{activeRank + 1}
+                <div
+                  key={entry.userId}
+                  className={`relative bg-white dark:bg-slate-800 rounded-xl border transition-all duration-200 hover:shadow-md ${
+                    isTop3
+                      ? 'border-transparent shadow-sm'
+                      : 'border-slate-200 dark:border-slate-700'
+                  } ${index === 0 ? 'ring-1 ring-amber-300/50 dark:ring-amber-500/30' : ''}`}
+                >
+                  <div className="flex items-center gap-4 p-5">
+                    {/* Rank */}
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-sm ${
+                      medalStyle
+                        ? `${medalStyle.bg} ${medalStyle.text}`
+                        : 'bg-slate-100 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500'
+                    }`}>
+                      {isTop3 ? medalStyle?.icon : `#${entry.rank}`}
+                    </div>
+
+                    {/* Avatar */}
+                    <img
+                      src={getAvatarUrl(user?.name || entry.userName, user?.avatar || entry.avatar)}
+                      className={`w-11 h-11 rounded-full ring-2 ${
+                        medalStyle ? medalStyle.ring : 'ring-slate-200 dark:ring-slate-600'
+                      }`}
+                      alt=""
+                    />
+
+                    {/* Name & Stats */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                        {entry.userName}
+                        {index === 0 && <span className="ml-2 text-amber-500">👑</span>}
+                      </p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                          <TrendingUp size={11} />
+                          {entry.successCount} wins
                         </span>
-                      )}
-                      <img src={getAvatarUrl(rank.userName)} className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-600" alt="" />
-                      <div>
-                        <p className="font-bold text-slate-900 dark:text-slate-100">{rank.userName}</p>
-                        {isInactive && (
-                          <p className="text-[10px] text-slate-400 font-medium">No projects assigned yet</p>
+                        {entry.revertCount > 0 && (
+                          <span className="text-[11px] text-red-500 dark:text-red-400 font-semibold flex items-center gap-1">
+                            <TrendingDown size={11} />
+                            {entry.revertCount} reverts
+                          </span>
                         )}
                       </div>
                     </div>
-                  </td>
-                  <td className="px-8 py-5">
-                    {rank.qaFirstTimeRightRate !== null ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                          <div className="bg-emerald-500 h-full" style={{ width: `${rank.qaFirstTimeRightRate}%` }}></div>
-                        </div>
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{rank.qaFirstTimeRightRate}%</span>
-                      </div>
-                    ) : <NaBadge />}
-                  </td>
-                  <td className="px-8 py-5">
-                    {rank.onTimeDeliveryRate !== null ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                          <div className="bg-indigo-500 h-full" style={{ width: `${rank.onTimeDeliveryRate}%` }}></div>
-                        </div>
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{rank.onTimeDeliveryRate}%</span>
-                      </div>
-                    ) : <NaBadge />}
-                  </td>
-                  <td className="px-8 py-5">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle className={`w-4 h-4 ${rank.completedProjects > 0 ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-600'}`} />
-                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{rank.completedProjects} Projects</span>
+
+                    {/* Score */}
+                    <div className={`text-right ${entry.score >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+                      <span className="text-lg font-bold tracking-tight">
+                        {entry.score > 0 ? '+' : ''}{entry.score}
+                      </span>
+                      <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Points</p>
                     </div>
-                  </td>
-                  <td className="px-8 py-5 text-right">
-                    <span className="px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded-full text-sm font-black">
-                      {rank.monthlyPoints}
-                    </span>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               );
             })}
-          </tbody>
-        </table>
+          </div>
+        )}
       </div>
     </div>
   );
-};
+}
 
 export default Leaderboard;

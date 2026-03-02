@@ -140,6 +140,12 @@ export const addTeamMemberSchema = z.object({
     version: z.number().int().positive()
 }).strict();
 
+export const updateStageDeadlineSchema = z.object({
+    newDeadline: z.string().datetime(), // ISO string expectation
+    reason: z.string().min(15, "Reason must be at least 15 characters long"),
+    delayResponsibility: z.enum(['INTERNAL', 'CLIENT', 'EXTERNAL'])
+}).strict();
+
 export const updateTeamMemberSchema = z.object({
     name: z.string().min(1).max(100).optional(),
     roleTitle: z.string().min(1).max(100).optional(),
@@ -173,4 +179,14 @@ export const updateChecklistTemplateSchema = z.object({
         label: z.string().min(1).max(500),
         required: z.boolean().optional()
     })).max(100).optional()
+}).strict();
+
+// === PHASE 3A: TENANT SCHEDULING CONFIG ===
+export const updateSchedulingConfigSchema = z.object({
+    designRatio: z.number().int().min(0).max(100),
+    developmentRatio: z.number().int().min(0).max(100),
+    qaRatio: z.number().int().min(0).max(100),
+    approvalRatio: z.number().int().min(0).max(100),
+    overlapPercent: z.number().int().min(0).max(50),
+    autoAllocate: z.boolean()
 }).strict();

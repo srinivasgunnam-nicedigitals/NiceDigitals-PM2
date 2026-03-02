@@ -11,7 +11,7 @@ export type InvalidateKey =
   | 'kanban'
   | 'projectStats'
   | 'notifications'
-  | 'rankings'
+  | 'leaderboard'
   | 'users';
 
 export interface InvalidateEvent {

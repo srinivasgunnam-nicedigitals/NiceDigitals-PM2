@@ -7,6 +7,7 @@ import TeamMembers from './pages/TeamMembers';
 import Leaderboard from './pages/Leaderboard';
 import CompletedProjects from './pages/CompletedProjects';
 import Activity from './pages/Activity';
+import SchedulingConfig from './pages/SchedulingConfig';
 import { Login } from './pages/Login';
 
 export const AppRoutes = () => {
@@ -22,6 +23,7 @@ export const AppRoutes = () => {
                 <Route path="/leaderboard" element={<Leaderboard />} />
                 <Route path="/archive" element={<CompletedProjects />} />
                 <Route path="/activity" element={<Activity />} />
+                <Route path="/admin/scheduling-config" element={<SchedulingConfig />} />
                 {/* Fallback */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Route>

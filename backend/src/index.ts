@@ -9,7 +9,6 @@ import { errorHandler } from './middleware/errorHandler.middleware';
 import authRoutes from './routes/auth.routes';
 import projectRoutes from './routes/projects.routes';
 import userRoutes from './routes/users.routes';
-import scoreRoutes from './routes/scores.routes';
 import bootstrapRoutes from './routes/bootstrap.routes';
 import { prisma } from './config/db';
 import { Server as SocketIOServer } from 'socket.io';
@@ -172,15 +171,17 @@ app.get('/', (req, res) => {
     res.json({ message: 'Nice Digital API is running 🚀', endpoints: '/api/*' });
 });
 
-import rankingRoutes from './routes/ranking.routes';
 import notificationRoutes from './routes/notifications.routes';
 import activityRoutes from './routes/activity.routes';
 import templateRoutes from './routes/checklist-templates.routes';
 import disciplineRoutes from './routes/discipline.routes';
 import executionHealthRoutes from './routes/execution-health.routes';
 import calibrationRoutes from './routes/calibration.routes';
+import leaderboardRoutes from './routes/leaderboard.routes';
+import tenantRoutes from './routes/tenants.routes';
 import { startDisciplineCron } from './services/discipline-cron.service';
 import { startHealthCron } from './services/health-cron.service';
+import { startLeaderboardCron } from './services/leaderboard-cron.service';
 import { emailService } from './services/email.service';
 import './workers/audit.worker';
 
@@ -189,14 +190,14 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/bootstrap', apiLimiter, bootstrapRoutes);
 app.use('/api/projects', apiLimiter, projectRoutes);
 app.use('/api/users', apiLimiter, userRoutes);
-app.use('/api/scores', apiLimiter, scoreRoutes);
-app.use('/api/rankings', apiLimiter, rankingRoutes);
+app.use('/api/leaderboard', apiLimiter, leaderboardRoutes);
 app.use('/api/notifications', apiLimiter, notificationRoutes);
 app.use('/api/activity', apiLimiter, activityRoutes);
 app.use('/api/checklist-templates', apiLimiter, templateRoutes);
 app.use('/api/discipline', apiLimiter, disciplineRoutes);
 app.use('/api/projects', apiLimiter, executionHealthRoutes);
 app.use('/api/calibration', apiLimiter, calibrationRoutes);
+app.use('/api/tenants', apiLimiter, tenantRoutes);
 
 // Global error handler
 app.use(errorHandler);
@@ -228,9 +229,10 @@ const startServer = async () => {
     httpServer.listen(PORT as number, '0.0.0.0', () => {
         logger.info({ port: PORT }, 'Server + WebSocket started on 0.0.0.0');
         
-        // Start daily discipline computation cron
+        // Start cron jobs
         startDisciplineCron();
         startHealthCron();
+        startLeaderboardCron();
     });
 };
 

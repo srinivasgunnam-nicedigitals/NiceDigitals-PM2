@@ -36,6 +36,9 @@ router.post('/:id/advance-stage', projectsController.advanceStage);
 // Phase 2A: Admin deadline modification
 router.patch('/:id/change-deadline', phase2aController.changeDeadline);
 
+// Phase 3C: Stage Deadline Edit
+router.patch('/:id/deadlines/:stage', requireAdmin, projectsController.updateStageDeadline);
+
 // Phase 2A: Admin lead reassignment
 router.patch('/:id/reassign-lead', phase2aController.reassignLead);
 

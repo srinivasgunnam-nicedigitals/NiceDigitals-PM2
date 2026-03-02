@@ -17,10 +17,11 @@ model Tenant {
   notifications Notification[]
   projects      Project[]
   teamMembers        ProjectTeamMember[]
-  scores             ScoreEntry[]
   users              User[]
   checklistTemplates ChecklistTemplate[]
   disciplineSnapshots DisciplineSnapshot[]
+  stageDeadlineRevisions StageDeadlineRevision[]
+  stageSchedulingConfig  StageSchedulingConfig?
 }
 
 model AuditLog {
@@ -66,8 +67,8 @@ model User {
   projectsDesigned Project[]            @relation("AssignedDesigner")
   projectsManaged  Project[]            @relation("AssignedDevManager")
   projectsQA       Project[]            @relation("AssignedQA")
-  scores           ScoreEntry[]
   disciplineSnapshots DisciplineSnapshot[]
+  stageDeadlineRevisions StageDeadlineRevision[]
   tenant           Tenant               @relation(fields: [tenantId], references: [id])
 }
 
@@ -113,15 +114,25 @@ model Project {
   version              Int                 @default(1)
   healthAtCompletion   Float?
   actualOutcome        String?             // ON_TIME | DELAYED | ESCALATED
+
+  // Track B — Stage Deadlines
+  designDeadline         DateTime?
+  developmentDeadline    DateTime?
+  internalQaDeadline     DateTime?
+  approvalDeadline       DateTime?
+  clientReviewDeadline   DateTime?
+  clientUatDeadline      DateTime?
+  deploymentDeadline     DateTime?
+
   comments             Comment[]
   history              HistoryItem[]
   healthSnapshots      ProjectHealthSnapshot[]
+  stageDeadlineRevisions StageDeadlineRevision[]
   assignedDesigner     User?               @relation("AssignedDesigner", fields: [assignedDesignerId], references: [id])
   assignedDevManager   User?               @relation("AssignedDevManager", fields: [assignedDevManagerId], references: [id])
   assignedQA           User?               @relation("AssignedQA", fields: [assignedQAId], references: [id])
   tenant               Tenant              @relation(fields: [tenantId], references: [id])
   teamMembers          ProjectTeamMember[]
-  scores               ScoreEntry[]
 
   @@index([tenantId])
   @@index([assignedDevManagerId])
@@ -217,21 +228,6 @@ model DisciplineSnapshot {
   @@index([tenantId, userId])
 }
 
-model ScoreEntry {
-  id        String   @id @default(uuid())
-  date      DateTime @default(now())
-  points    Int
-  reason    String
-  projectId String
-  userId    String
-  tenantId  String
-  project   Project  @relation(fields: [projectId], references: [id])
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@index([tenantId, userId])
-  @@index([tenantId, date])
-}
 
 model Notification {
   id        String   @id @default(uuid())
@@ -285,6 +281,7 @@ enum ProjectStage {
   CLIENT_UAT
   DEPLOYMENT
   COMPLETED
+  OVERALL // Track B: used by StageDeadlineRevision to log overallDeadline changes
 }
 
 enum RevertReasonCategory {
@@ -323,4 +320,126 @@ model ProjectHealthSnapshot {
   
   @@index([projectId])
   @@index([tenantId, snapshotDate])
+}
+
+// =============================================
+// LEADERBOARD V3 — Event-Driven Scoring Engine
+// =============================================
+
+enum LeaderboardEventType {
+  DESIGN_HANDOFF
+  DESIGN_REVERT
+  DEV_REVERT_TO_DESIGN
+  DEV_TO_QA
+  QA_REJECTION
+  QA_CLEARANCE
+  UAT_REJECTION
+  PROJECT_COMPLETED_ONTIME
+  PROJECT_COMPLETED_DELAYED
+  STAGE_COMPLETED_ON_TIME
+  STAGE_COMPLETED_LATE
+}
+
+model RoleLeaderboardEntry {
+  id           String   @id @default(uuid())
+  tenantId     String
+  userId       String
+  role         UserRole
+  month        Int
+  year         Int
+  score        Float    @default(0)
+  successCount Int      @default(0)
+  revertCount  Int      @default(0)
+  onTimeCount  Int      @default(0)
+  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now())
+
+  @@unique([tenantId, userId, role, month, year])
+  @@index([tenantId, role, month, year])
+}
+
+model LeaderboardEventLog {
+  id        String               @id @default(uuid())
+  projectId String
+  userId    String
+  eventType LeaderboardEventType
+  month     Int
+  year      Int
+  points    Float
+  tenantId  String
+  createdAt DateTime             @default(now())
+
+  @@index([projectId, userId, eventType, month, year])
+  @@index([tenantId, month, year])
+}
+
+model LeaderboardConfig {
+  id         String               @id @default(uuid())
+  tenantId   String
+  role       UserRole
+  eventType  LeaderboardEventType
+  basePoints Float
+  updatedAt  DateTime             @updatedAt
+
+  @@unique([tenantId, role, eventType])
+}
+
+model LeaderboardConfigSnapshot {
+  id         String               @id @default(uuid())
+  tenantId   String
+  role       UserRole
+  eventType  LeaderboardEventType
+  basePoints Float
+  month      Int
+  year       Int
+  createdAt  DateTime             @default(now())
+
+  @@unique([tenantId, role, eventType, month, year])
+}
+
+// =============================================
+// TRACK B — Stage Deadline Governance
+// =============================================
+
+enum DelayResponsibility {
+  INTERNAL
+  CLIENT
+  EXTERNAL
+}
+
+model StageDeadlineRevision {
+  id                  String              @id @default(uuid())
+  tenantId            String
+  projectId           String
+  stage               ProjectStage
+  previousDeadline    DateTime?
+  newDeadline         DateTime?
+  reason              String
+  delayResponsibility DelayResponsibility
+  changedByUserId     String
+  createdAt           DateTime            @default(now())
+
+  project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  changedByUser       User                @relation(fields: [changedByUserId], references: [id])
+  tenant              Tenant              @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([stage])
+}
+
+model StageSchedulingConfig {
+  id               String   @id @default(uuid())
+  tenantId         String   @unique
+  designRatio      Int
+  developmentRatio Int
+  qaRatio          Int
+  approvalRatio    Int
+  overlapPercent   Int
+  autoAllocate     Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
+
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
 }

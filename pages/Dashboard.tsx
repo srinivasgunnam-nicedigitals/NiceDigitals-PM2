@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { useProjectStats, useDevRankings } from '../hooks/useDashboard';
+import { useProjectStats, useLeaderboard } from '../hooks/useDashboard';
 import { useProjectsQuery } from '../hooks/useProjectsQuery';
 import { useKanbanQuery, ORDERED_STAGES, KanbanStage } from '../hooks/useKanbanQuery';
 import { useUsers } from '../hooks/useUsers';
@@ -48,7 +48,8 @@ import { STAGE_CONFIG, PRIORITY_CONFIG } from '../constants';
 
 const AdminOverview = () => {
   const { data: projectStats } = useProjectStats();
-  const { data: rankings = [] } = useDevRankings();
+  const { data: leaderboardData } = useLeaderboard('dev');
+  const rankings = leaderboardData?.entries || [];
   const { projects, isLoading } = useProjectsQuery(1, 500);
   const { users } = useUsers();
   const { theme } = useTheme();
@@ -206,17 +207,17 @@ const AdminOverview = () => {
             </h3>
           </div>
           <div className="space-y-4">
-            {rankings.slice(0, 4).map((rank, i) => (
+            {rankings.slice(0, 4).map((rank: any, i: number) => (
               <div key={rank.userId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                 <span className="text-[11px] font-bold text-slate-400 w-4">0{i + 1}</span>
                 <img src={getAvatarUrl(users.find(u => u.id === rank.userId)?.name || rank.userName, users.find(u => u.id === rank.userId)?.avatar)} className="w-8 h-8 rounded-md" alt="" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate">{rank.userName}</p>
                   <div className="w-full bg-slate-100 h-1 rounded-full mt-1.5 overflow-hidden">
-                    <div className="bg-indigo-500 h-full" style={{ width: `${Math.min((rank.monthlyPoints / 50) * 100, 100)}%` }}></div>
+                    <div className="bg-indigo-500 h-full" style={{ width: `${Math.min((rank.score / 50) * 100, 100)}%` }}></div>
                   </div>
                 </div>
-                <span className="text-[12px] font-bold text-slate-900 dark:text-slate-100">{rank.monthlyPoints}</span>
+                <span className="text-[12px] font-bold text-slate-900 dark:text-slate-100">{rank.score}</span>
               </div>
             ))}
           </div>
